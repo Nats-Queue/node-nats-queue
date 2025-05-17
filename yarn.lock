@@ -120,14 +120,30 @@
     "@jridgewell/resolve-uri" "^3.1.0"
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
-"@nats-io/jetstream@3.0.0-10":
-  version "3.0.0-10"
-  resolved "https://registry.yarnpkg.com/@nats-io/jetstream/-/jetstream-3.0.0-10.tgz#82beb86ef85404c3f09bf3eda5a21902be335a7e"
-  integrity sha512-FOdwBximucQszBAsSAckqhXxh0WZozKbRTMzODCudcHpOEv0jUwnoqFLG/8r607pJDX1gdiYADF5hpeV3gvh7A==
+"@nats-io/jetstream@3.0.2":
+  version "3.0.2"
+  resolved "https://registry.yarnpkg.com/@nats-io/jetstream/-/jetstream-3.0.2.tgz#f6baa09b46e27e8e779d5391d54cd7d76be8db23"
+  integrity sha512-dR789x1xhMyEukXILPWDo6ODW53nHpBD9LnsnnywA+pTkwYFydEkYdyhv9HzFc6s6Nfrb2TpibrT4znijlg2dg==
   dependencies:
-    "@nats-io/nats-core" "~3.0.0-26"
+    "@nats-io/nats-core" "3.0.2"
 
-"@nats-io/nats-core@3.0.0-27", "@nats-io/nats-core@~3.0.0-26":
+"@nats-io/kv@3.0.2":
+  version "3.0.2"
+  resolved "https://registry.yarnpkg.com/@nats-io/kv/-/kv-3.0.2.tgz#7407bae502308bbf730ebe563da434df81153b5c"
+  integrity sha512-/4YvVlgmS6HEtukJE66kelJOHovB411GFo8kTUnUr6FYwws9eNMhsOwvBC4HEZXy9m8VjlA0t4nPPoH66bj2lg==
+  dependencies:
+    "@nats-io/jetstream" "3.0.2"
+    "@nats-io/nats-core" "3.0.2"
+
+"@nats-io/nats-core@3.0.2":
+  version "3.0.2"
+  resolved "https://registry.yarnpkg.com/@nats-io/nats-core/-/nats-core-3.0.2.tgz#e4dcfa440583e9077673d00f33995f57f040d7dc"
+  integrity sha512-gACbRIhY3yQTO+5C4E1LY/qO2e5EhGUBeDsnPDT8Hd3qY9mfhNtluY6R7d7WX7/JMGsXRPbYdSLSADr/ECSy3w==
+  dependencies:
+    "@nats-io/nkeys" "2.0.3"
+    "@nats-io/nuid" "2.0.3"
+
+"@nats-io/nats-core@~3.0.0-26":
   version "3.0.0-27"
   resolved "https://registry.yarnpkg.com/@nats-io/nats-core/-/nats-core-3.0.0-27.tgz#e6ccd3d7acd9786cb9b3219ccb942d721586c201"
   integrity sha512-xJvUWoRvUTG/3K4Ppf5KXTZezicbvd2o/psMyI7YPtIxKZsZALXL/bLoNb7FB/Hw4jECioZE7LZCSK41npFD2A==
@@ -142,10 +158,22 @@
   dependencies:
     tweetnacl "1.0.3"
 
+"@nats-io/nkeys@2.0.3":
+  version "2.0.3"
+  resolved "https://registry.yarnpkg.com/@nats-io/nkeys/-/nkeys-2.0.3.tgz#37ce8725e075033202c9ca6093bb22c4a1989430"
+  integrity sha512-JVt56GuE6Z89KUkI4TXUbSI9fmIfAmk6PMPknijmuL72GcD+UgIomTcRWiNvvJKxA01sBbmIPStqJs5cMRBC3A==
+  dependencies:
+    tweetnacl "^1.0.3"
+
 "@nats-io/nuid@2.0.1-2", "@nats-io/nuid@^2.0.1-2":
   version "2.0.1-2"
   resolved "https://registry.yarnpkg.com/@nats-io/nuid/-/nuid-2.0.1-2.tgz#ec2d9bd0879fecfea1996dcc1f820af6860ea52f"
   integrity sha512-oXJiWXH87FjcPAXVVkoY+o7z9YFuOvsVlUlvB4h/QsoC1hp63lB18YOMHmKxVNO7BzvwzJh3SKLlIlsQrEwaxg==
+
+"@nats-io/nuid@2.0.3":
+  version "2.0.3"
+  resolved "https://registry.yarnpkg.com/@nats-io/nuid/-/nuid-2.0.3.tgz#3afe66825dcb2921386d9a43ba1175a2e36d528c"
+  integrity sha512-TpA3HEBna/qMVudy+3HZr5M3mo/L1JPofpVT4t0HkFGkz2Cn9wrlrQC8tvR8Md5Oa9//GtGG26eN0qEWF5Vqew==
 
 "@nats-io/transport-node@3.0.0-12":
   version "3.0.0-12"
@@ -1155,7 +1183,7 @@ ts-node@10.9.2:
     v8-compile-cache-lib "^3.0.1"
     yn "3.1.1"
 
-tweetnacl@1.0.3:
+tweetnacl@1.0.3, tweetnacl@^1.0.3:
   version "1.0.3"
   resolved "https://registry.yarnpkg.com/tweetnacl/-/tweetnacl-1.0.3.tgz#ac0af71680458d8a6378d0d0d050ab1407d35596"
   integrity sha512-6rt+RN7aOi1nGMyC4Xa5DdYiukl2UWCbcJft7YhxReBGQD7OAM8Pbxw6YMo4r2diNEA8FEmu32YOn9rhaiE5yw==

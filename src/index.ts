@@ -2,15 +2,13 @@ import EventEmitter from 'events'
 
 import { AckPolicy } from '@nats-io/jetstream'
 import { nanos, NatsError } from '@nats-io/nats-core'
-import type { JetStreamClient, Consumer, JsMsg} from '@nats-io/jetstream'
+import type { JetStreamClient, Consumer, JsMsg } from '@nats-io/jetstream'
 import type { MsgHdrs } from '@nats-io/nats-core'
 
 import { createSubject, sleep } from './utils'
 import { FixedWindowLimiter, IntervalLimiter, type Limiter } from './limiter'
 
-
-export type QueueOpts
- = {
+export type QueueOpts = {
   client: JetStreamClient
   name: string
 
@@ -43,40 +41,41 @@ export class Queue {
     this.client = opts.client
     this.name = opts.name
 
-    this.deduplicateWindow = opts.deduplicateWindow || DEFAULT_DEDUPLICATE_WINDOW
+    this.deduplicateWindow =
+      opts.deduplicateWindow || DEFAULT_DEDUPLICATE_WINDOW
   }
 
   async setup() {
     const manager = await this.client.jetstreamManager()
-    
+
     try {
       await manager.streams.add({
         name: this.name,
         subjects: [`${this.name}.*`],
-        duplicate_window: nanos(this.deduplicateWindow)
+        duplicate_window: nanos(this.deduplicateWindow),
       })
     } catch (e) {
       // TODO smart error handling
       if (!(e instanceof NatsError)) {
         throw e
       }
-      await manager.streams.update(
-        this.name,
-        {
-          subjects: [`${this.name}.*`],
-          duplicate_window: nanos(this.deduplicateWindow)
-        }
-      )
+      await manager.streams.update(this.name, {
+        subjects: [`${this.name}.*`],
+        duplicate_window: nanos(this.deduplicateWindow),
+      })
     }
-    
   }
 
   async add(name: string, data?: unknown, options?: AddOptions) {
     const payload = JSON.stringify(data)
-    return this.client.publish(`${this.name}.${name}`, payload, options && {
-      msgID: options.id, 
-      headers: options.headers
-    })
+    return this.client.publish(
+      `${this.name}.${name}`,
+      payload,
+      options && {
+        msgID: options.id,
+        headers: options.headers,
+      },
+    )
   }
 }
 
@@ -91,6 +90,14 @@ export type WorkerOpts = {
   processor: (job: JsMsg) => Promise<void>
   concurrency?: number
   rateLimit?: RateLimit
+  priorityQuota?: Map<
+    number,
+    {
+      quota: number
+    }
+  >
+  maxRetries?: number
+  priorities?: number
 }
 
 export class Worker extends EventEmitter {
@@ -117,9 +124,13 @@ export class Worker extends EventEmitter {
 
     this.fetchInterval = 150
     this.fetchTimeout = 3_000
-    this.limiter = opts.rateLimit ?
-      new FixedWindowLimiter(opts.rateLimit.max, opts.rateLimit.duration, this.fetchInterval) :
-      new IntervalLimiter(this.fetchInterval)
+    this.limiter = opts.rateLimit
+      ? new FixedWindowLimiter(
+          opts.rateLimit.max,
+          opts.rateLimit.duration,
+          this.fetchInterval,
+        )
+      : new IntervalLimiter(this.fetchInterval)
   }
 
   async setup() {
@@ -196,7 +207,7 @@ export class Worker extends EventEmitter {
     try {
       return this.consumer!.fetch({
         max_messages: count,
-        expires: this.fetchTimeout
+        expires: this.fetchTimeout,
       })
     } catch (e) {
       // TODO

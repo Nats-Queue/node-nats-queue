@@ -4,8 +4,11 @@ import { describe, it, before, after, afterEach } from 'node:test'
 import { connect, nanos } from '@nats-io/transport-node'
 import { jetstream } from '@nats-io/jetstream'
 import { NatsConnection } from '@nats-io/nats-core'
-import type { ConsumerInfo, JetStreamClient, JetStreamManager } from '@nats-io/jetstream'
-
+import type {
+  ConsumerInfo,
+  JetStreamClient,
+  JetStreamManager,
+} from '@nats-io/jetstream'
 
 import { Queue, Worker } from '../src'
 
