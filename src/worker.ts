@@ -5,15 +5,18 @@ import {
   AckPolicy,
   JetStreamManager,
   ConsumerMessages,
+  JetStreamApiError,
 } from '@nats-io/jetstream'
 import { KV, Kvm } from '@nats-io/kv'
-import { errors } from '@nats-io/nats-core'
 import EventEmitter from 'events'
-import { WorkerOpts } from '.'
+import { RateLimit } from '.'
 import { Limiter, FixedWindowLimiter, IntervalLimiter } from './limiter'
-import { createSubject, sleep } from './utils'
+import { sleep } from './utils'
+import { headers, TimeoutError } from '@nats-io/nats-core'
 
-type JobData = {
+// TODO: Maybe add Pino logger
+
+export type JobData = {
   id: string
   name: string
   parentId: string
@@ -22,15 +25,33 @@ type JobData = {
     startTime: number
     retryCount: number
     timeout: number
+    parentId?: string
   }
   data: unknown
   // Why does job need to know about the queue name?
   queueName: string
 }
+
+export type WorkerOpts = {
+  client: JetStreamClient
+  name: string
+  processor: (job: JsMsg, timeout: number) => Promise<void>
+  concurrency?: number
+  rateLimit?: RateLimit
+  priorityQuota?: Map<
+    number,
+    {
+      quota: number
+    }
+  >
+  maxRetries?: number
+  priorities?: number
+}
+
 export class Worker extends EventEmitter {
   protected readonly client: JetStreamClient
   protected readonly name: string
-  protected readonly processor: (job: JsMsg) => Promise<void>
+  protected readonly processor: (job: JsMsg, timeout: number) => Promise<void>
   protected readonly concurrency: number
   protected readonly limiter: Limiter
   protected readonly fetchInterval: number
@@ -44,7 +65,6 @@ export class Worker extends EventEmitter {
   protected running = false
   protected processingNow = 0
   protected loopPromise: Promise<void> | null = null
-  //   TODO: What is this?
   protected kv: KV | null = null
   protected priorityQuota?: Map<
     number,
@@ -96,7 +116,11 @@ export class Worker extends EventEmitter {
       this.kv = await kvm.create(`${this.name}_parent_id`)
       this.consumers = await this.setupConsumers()
     } catch (e) {
-      throw new Error()
+      // TODO: Error handling?
+      console.error(
+        `Error while setting up worker: ${this.name} with error: ${e}`,
+      )
+      throw e
     }
   }
 
@@ -106,17 +130,32 @@ export class Worker extends EventEmitter {
       // TODO: Naming might be wrong, independent of the queue name
       const consumerName = `worker_group_${i}`
       const subject = `${this.name}.*.${i}`
-      await this.manager?.consumers.add(this.name, {
-        filter_subject: subject,
-        name: consumerName,
-        durable_name: consumerName,
-        ack_policy: AckPolicy.All,
-      })
-      const consumer = await this.client.consumers.get(consumerName)
-      console.log(
-        `Consumer: name=${this.name} successfully subscribed to topic ${subject}.`,
-      )
-      consumers.push(consumer)
+      try {
+        await this.manager!.consumers.add(this.name, {
+          filter_subject: subject,
+          name: consumerName,
+          durable_name: consumerName,
+          ack_policy: AckPolicy.All,
+        })
+        try {
+          const consumer = await this.client.consumers.get(
+            this.name,
+            consumerName,
+          )
+          console.log(
+            `Consumer: name=${this.name} successfully subscribed to topic ${subject}.`,
+          )
+          consumers.push(consumer)
+        } catch (e) {
+          console.error('Error while getting consumer:', e)
+          throw e
+        }
+      } catch (e) {
+        console.error(
+          `Consumer: name=${this.name} error while subscribing to topic ${subject}: ${e}`,
+        )
+        throw e
+      }
     }
     return consumers
   }
@@ -144,7 +183,7 @@ export class Worker extends EventEmitter {
   }
 
   private resetQuotesCounter() {
-    for (const [priority, item] of this.priorityQuota!.entries()) {
+    for (const [, item] of this.priorityQuota!.entries()) {
       item.counter = 0
     }
   }
@@ -197,7 +236,7 @@ export class Worker extends EventEmitter {
           this.priorityQuota.get(consumerPriority)!.counter += 1
 
         this.limiter.inc()
-        this.process(j)
+        this.processTask(j)
       }
 
       await sleep(this.limiter.timeout())
@@ -205,9 +244,10 @@ export class Worker extends EventEmitter {
   }
 
   protected async processTask(j: JsMsg) {
+    this.processingNow += 1
+    const data: JobData = JSON.parse(new TextDecoder().decode(j.data))
+
     try {
-      this.processingNow += 1
-      const data: JobData = JSON.parse(new TextDecoder().decode(j.data))
       if (data.meta.failed) {
         await j.term()
       }
@@ -229,8 +269,7 @@ export class Worker extends EventEmitter {
           `Job: name=${data.name} id=${data.id} failed max retries exceeded`,
         )
 
-        // TODO: Mark parents failed
-        // await tihs.markParentsFailed(data)
+        await this.markParentsFailed(data)
         return
       }
 
@@ -238,34 +277,103 @@ export class Worker extends EventEmitter {
         `Job: name=${data.name} id=${data.id} is started with data=${data.data} in queue=${data.queueName}`,
       )
 
-      // TODO: Process timeout
       const timeout = data.meta.timeout
-    } catch (e) {}
-  }
+      await this.processor(j, timeout)
 
-  protected async process(j: JsMsg) {
-    this.processingNow += 1
-    try {
-      this.process(j)
       await j.ackAck()
+      console.log(`Job: name=${data.name} id=${data.id} is completed`)
+
+      const parentId = data.meta?.parentId
+      if (parentId) {
+        const parentJob = await this.kv!.get(parentId)
+        if (parentJob) {
+          const parentJobData = JSON.parse(
+            new TextDecoder().decode(parentJob.value),
+          )
+          parentJobData.children_count -= 1
+
+          // TODO: Race condition?
+          await this.kv!.put(
+            parentId,
+            new TextEncoder().encode(JSON.stringify(parentJobData)),
+          )
+
+          if (parentJobData.children_count === 0) {
+            await this.kv!.delete(parentId)
+            await this.publishParentJob(parentJobData)
+          }
+        }
+      }
     } catch (e) {
+      if (e instanceof TimeoutError) {
+        console.error(
+          `Job: name=${data.name} id=${data.id} TimeoutError start retry`,
+        )
+      } else {
+        console.error(
+          `Error while processing job id=${data.id}: ${e} start retry`,
+        )
+      }
+
+      const newId = `${crypto.randomUUID()}_${Date.now()}`
+      data.meta.retryCount += 1
+      data.id = newId
+
+      const jobBytes = new TextEncoder().encode(JSON.stringify(data))
       await j.term()
+      const messageHeaders = headers()
+      messageHeaders.set('Nats-Msg-Id', newId)
+      await this.client.publish(j.subject, jobBytes, {
+        headers: messageHeaders,
+      })
     } finally {
       this.processingNow -= 1
     }
+  }
+
+  protected async markParentsFailed(jobData: JobData): Promise<void> {
+    const parentId = jobData.meta?.parentId
+    if (!parentId) {
+      return
+    }
+
+    const parentJob = await this.kv!.get(parentId)
+    if (!parentJob) {
+      console.log(`ParentJob with id=${parentId} not found in KV store.`)
+      return
+    }
+
+    const parentJobData = JSON.parse(new TextDecoder().decode(parentJob.value))
+    parentJobData.meta.failed = true
+
+    await this.publishParentJob(parentJobData)
+    await this.markParentsFailed(parentJobData)
+  }
+
+  protected async publishParentJob(parentJobData: JobData): Promise<void> {
+    const subject = `${parentJobData.queueName}.${parentJobData.name}.1`
+    const jobBytes = new TextEncoder().encode(JSON.stringify(parentJobData))
+    const msgHeaders = headers()
+    msgHeaders.set('Nats-Msg-Id', parentJobData.id)
+    await this.client!.publish(subject, jobBytes, {
+      headers: msgHeaders,
+    })
+    console.log(
+      `ParentJob: name=${parentJobData.name} id=${parentJobData.id} added to topic=${subject} successfully`,
+    )
   }
 
   protected async fetch(
     consumer: Consumer,
     count: number,
   ): Promise<ConsumerMessages | never[]> {
+    // TODO: Maybe fail to fetch consumer info
+    const consumerInfo = await consumer.info()
     try {
       const msgs = await consumer.fetch({
         max_messages: count,
         expires: this.fetchTimeout,
       })
-      // TODO: Fetch consumer info
-      const consumerInfo = await consumer.info()
       console.debug(
         `Consumer: name=${
           consumerInfo.name
@@ -275,8 +383,18 @@ export class Worker extends EventEmitter {
 
       return msgs
     } catch (e) {
-      // TODO
-      return []
+      if (e instanceof TimeoutError) {
+        console.debug(
+          `Consumer: name=${consumerInfo.name} timeout while fetching messages`,
+        )
+        return []
+      }
+
+      console.error(
+        `Consumer: name=${consumerInfo.name} error while fetching messages from queue=${this.name}: ${e}`,
+      )
+      // TODO: Handle other errors
+      throw e
     }
   }
 }

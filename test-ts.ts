@@ -1,5 +1,5 @@
-import { jetstream } from '@nats-io/jetstream'
-import { connect, Kvm } from '@nats-io/kv'
+import { connect } from '@nats-io/transport-node'
 
-const js = jetstream()
-const kv = await new Kvm(js)
+const client = await connect({
+  servers: '',
+})

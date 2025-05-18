@@ -87,7 +87,7 @@ export type RateLimit = {
 export type WorkerOpts = {
   client: JetStreamClient
   name: string
-  processor: (job: JsMsg) => Promise<void>
+  processor: (job: JsMsg, timeout: number) => Promise<void>
   concurrency?: number
   rateLimit?: RateLimit
   priorityQuota?: Map<

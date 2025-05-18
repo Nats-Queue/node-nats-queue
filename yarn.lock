@@ -143,21 +143,6 @@
     "@nats-io/nkeys" "2.0.3"
     "@nats-io/nuid" "2.0.3"
 
-"@nats-io/nats-core@~3.0.0-26":
-  version "3.0.0-27"
-  resolved "https://registry.yarnpkg.com/@nats-io/nats-core/-/nats-core-3.0.0-27.tgz#e6ccd3d7acd9786cb9b3219ccb942d721586c201"
-  integrity sha512-xJvUWoRvUTG/3K4Ppf5KXTZezicbvd2o/psMyI7YPtIxKZsZALXL/bLoNb7FB/Hw4jECioZE7LZCSK41npFD2A==
-  dependencies:
-    "@nats-io/nkeys" "1.2.0-4"
-    "@nats-io/nuid" "2.0.1-2"
-
-"@nats-io/nkeys@1.2.0-4", "@nats-io/nkeys@^1.2.0-4":
-  version "1.2.0-4"
-  resolved "https://registry.yarnpkg.com/@nats-io/nkeys/-/nkeys-1.2.0-4.tgz#3e16d9076b2f936181dd9d6123dc705daccf714b"
-  integrity sha512-61R4SO9059AyZBhoZRECHobHsY6mBOGwB5ewBrbnDKVtTehnFwyMNaORHhksFmu9K0zyUtwBWyffzKpibp2Cew==
-  dependencies:
-    tweetnacl "1.0.3"
-
 "@nats-io/nkeys@2.0.3":
   version "2.0.3"
   resolved "https://registry.yarnpkg.com/@nats-io/nkeys/-/nkeys-2.0.3.tgz#37ce8725e075033202c9ca6093bb22c4a1989430"
@@ -165,24 +150,19 @@
   dependencies:
     tweetnacl "^1.0.3"
 
-"@nats-io/nuid@2.0.1-2", "@nats-io/nuid@^2.0.1-2":
-  version "2.0.1-2"
-  resolved "https://registry.yarnpkg.com/@nats-io/nuid/-/nuid-2.0.1-2.tgz#ec2d9bd0879fecfea1996dcc1f820af6860ea52f"
-  integrity sha512-oXJiWXH87FjcPAXVVkoY+o7z9YFuOvsVlUlvB4h/QsoC1hp63lB18YOMHmKxVNO7BzvwzJh3SKLlIlsQrEwaxg==
-
 "@nats-io/nuid@2.0.3":
   version "2.0.3"
   resolved "https://registry.yarnpkg.com/@nats-io/nuid/-/nuid-2.0.3.tgz#3afe66825dcb2921386d9a43ba1175a2e36d528c"
   integrity sha512-TpA3HEBna/qMVudy+3HZr5M3mo/L1JPofpVT4t0HkFGkz2Cn9wrlrQC8tvR8Md5Oa9//GtGG26eN0qEWF5Vqew==
 
-"@nats-io/transport-node@3.0.0-12":
-  version "3.0.0-12"
-  resolved "https://registry.yarnpkg.com/@nats-io/transport-node/-/transport-node-3.0.0-12.tgz#714ee323089a0c0e58c17897131f943719beeb46"
-  integrity sha512-TWBlZULn02iY3A3+MrC5CztQ4YclFQPiQrH56fToC68NA1rfqWw54RPWaUVrbjgg5u6dX1CH6yuNZImdZV5HGA==
+"@nats-io/transport-node@3.0.2":
+  version "3.0.2"
+  resolved "https://registry.yarnpkg.com/@nats-io/transport-node/-/transport-node-3.0.2.tgz#58125d6e4ce0eba8b5f9ef64c43cf45ff491ad54"
+  integrity sha512-hPuep/ObVepjAM1dFy+XhqMlIzga3bQpbgQiOWM5AxwNZ9CF7GHAtfaxG7WY6+t057tBW8axC0nBL71Q8chQBQ==
   dependencies:
-    "@nats-io/nats-core" "~3.0.0-26"
-    "@nats-io/nkeys" "^1.2.0-4"
-    "@nats-io/nuid" "^2.0.1-2"
+    "@nats-io/nats-core" "3.0.2"
+    "@nats-io/nkeys" "2.0.3"
+    "@nats-io/nuid" "2.0.3"
 
 "@nodelib/fs.scandir@2.1.5":
   version "2.1.5"
@@ -1078,16 +1058,7 @@ signal-exit@^4.0.1:
   resolved "https://registry.yarnpkg.com/signal-exit/-/signal-exit-4.1.0.tgz#952188c1cbd546070e2dd20d0f41c0ae0530cb04"
   integrity sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==
 
-"string-width-cjs@npm:string-width@^4.2.0":
-  version "4.2.3"
-  resolved "https://registry.yarnpkg.com/string-width/-/string-width-4.2.3.tgz#269c7117d27b05ad2e536830a8ec895ef9c6d010"
-  integrity sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g==
-  dependencies:
-    emoji-regex "^8.0.0"
-    is-fullwidth-code-point "^3.0.0"
-    strip-ansi "^6.0.1"
-
-string-width@^4.1.0, string-width@^4.2.0, string-width@^4.2.3:
+"string-width-cjs@npm:string-width@^4.2.0", string-width@^4.1.0, string-width@^4.2.0, string-width@^4.2.3:
   version "4.2.3"
   resolved "https://registry.yarnpkg.com/string-width/-/string-width-4.2.3.tgz#269c7117d27b05ad2e536830a8ec895ef9c6d010"
   integrity sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g==
@@ -1105,14 +1076,7 @@ string-width@^5.0.1, string-width@^5.1.2:
     emoji-regex "^9.2.2"
     strip-ansi "^7.0.1"
 
-"strip-ansi-cjs@npm:strip-ansi@^6.0.1":
-  version "6.0.1"
-  resolved "https://registry.yarnpkg.com/strip-ansi/-/strip-ansi-6.0.1.tgz#9e26c63d30f53443e9489495b2105d37b67a85d9"
-  integrity sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A==
-  dependencies:
-    ansi-regex "^5.0.1"
-
-strip-ansi@^6.0.0, strip-ansi@^6.0.1:
+"strip-ansi-cjs@npm:strip-ansi@^6.0.1", strip-ansi@^6.0.0, strip-ansi@^6.0.1:
   version "6.0.1"
   resolved "https://registry.yarnpkg.com/strip-ansi/-/strip-ansi-6.0.1.tgz#9e26c63d30f53443e9489495b2105d37b67a85d9"
   integrity sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A==
@@ -1183,7 +1147,7 @@ ts-node@10.9.2:
     v8-compile-cache-lib "^3.0.1"
     yn "3.1.1"
 
-tweetnacl@1.0.3, tweetnacl@^1.0.3:
+tweetnacl@^1.0.3:
   version "1.0.3"
   resolved "https://registry.yarnpkg.com/tweetnacl/-/tweetnacl-1.0.3.tgz#ac0af71680458d8a6378d0d0d050ab1407d35596"
   integrity sha512-6rt+RN7aOi1nGMyC4Xa5DdYiukl2UWCbcJft7YhxReBGQD7OAM8Pbxw6YMo4r2diNEA8FEmu32YOn9rhaiE5yw==
@@ -1247,16 +1211,7 @@ word-wrap@^1.2.5:
   resolved "https://registry.yarnpkg.com/word-wrap/-/word-wrap-1.2.5.tgz#d2c45c6dd4fbce621a66f136cbe328afd0410b34"
   integrity sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==
 
-"wrap-ansi-cjs@npm:wrap-ansi@^7.0.0":
-  version "7.0.0"
-  resolved "https://registry.yarnpkg.com/wrap-ansi/-/wrap-ansi-7.0.0.tgz#67e145cff510a6a6984bdf1152911d69d2eb9e43"
-  integrity sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==
-  dependencies:
-    ansi-styles "^4.0.0"
-    string-width "^4.1.0"
-    strip-ansi "^6.0.0"
-
-wrap-ansi@^7.0.0:
+"wrap-ansi-cjs@npm:wrap-ansi@^7.0.0", wrap-ansi@^7.0.0:
   version "7.0.0"
   resolved "https://registry.yarnpkg.com/wrap-ansi/-/wrap-ansi-7.0.0.tgz#67e145cff510a6a6984bdf1152911d69d2eb9e43"
   integrity sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==

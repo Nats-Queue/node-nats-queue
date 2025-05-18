@@ -2,3 +2,5 @@ node_modules
 coverage
 
 dist
+
+.github/copilot-instructions.md
