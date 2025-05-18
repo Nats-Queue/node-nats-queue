@@ -4,3 +4,4 @@ coverage
 dist
 
 .github/copilot-instructions.md
+.gitconfig
