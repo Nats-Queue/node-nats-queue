@@ -16,10 +16,9 @@ import { headers, TimeoutError } from '@nats-io/nats-core'
 
 // TODO: Maybe add Pino logger
 
-export type JobData = {
+export type Job = {
   id: string
   name: string
-  parentId: string
   meta: {
     failed: boolean
     startTime: number
@@ -30,6 +29,15 @@ export type JobData = {
   data: unknown
   // Why does job need to know about the queue name?
   queueName: string
+}
+
+export type JobCreateData = {
+  name: string
+  data: unknown
+  queueName: string
+  id?: string
+  delay?: number
+  timeout?: number
 }
 
 export type WorkerOpts = {
@@ -243,7 +251,7 @@ export class Worker {
 
   protected async processTask(j: JsMsg) {
     this.processingNow += 1
-    const data: JobData = JSON.parse(new TextDecoder().decode(j.data))
+    const data: Job = JSON.parse(new TextDecoder().decode(j.data))
 
     try {
       if (data.meta.failed) {
@@ -329,7 +337,7 @@ export class Worker {
     }
   }
 
-  protected async markParentsFailed(jobData: JobData): Promise<void> {
+  protected async markParentsFailed(jobData: Job): Promise<void> {
     const parentId = jobData.meta?.parentId
     if (!parentId) {
       return
@@ -348,7 +356,7 @@ export class Worker {
     await this.markParentsFailed(parentJobData)
   }
 
-  protected async publishParentJob(parentJobData: JobData): Promise<void> {
+  protected async publishParentJob(parentJobData: Job): Promise<void> {
     const subject = `${parentJobData.queueName}.${parentJobData.name}.1`
     const jobBytes = new TextEncoder().encode(JSON.stringify(parentJobData))
     const msgHeaders = headers()

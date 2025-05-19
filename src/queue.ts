@@ -4,7 +4,7 @@ import {
   JetStreamClient,
   JetStreamManager,
 } from '@nats-io/jetstream'
-import { JobData } from './worker' // Assuming JobData is defined in a separate file
+import { JobCreateData, Job } from './worker' // Assuming JobData is defined in a separate file
 import { TextEncoder } from 'util'
 import { KV, Kvm } from '@nats-io/kv'
 import { headers, nanos, NatsConnection } from '@nats-io/nats-core'
@@ -13,7 +13,7 @@ const DEFAULT_DEDUPLICATE_WINDOW = 2000
 const MIN_DUPLICATE_WINDOW = 100
 
 type FlowJob = {
-  job: JobData
+  job: Job
   children?: FlowJob[]
 }
 
@@ -101,6 +101,7 @@ export class Queue {
     }
   }
 
+  // TODO: I think this is not needed
   public async close(): Promise<void> {
     try {
       if (this.connection.isClosed()) {
@@ -119,7 +120,7 @@ export class Queue {
     }
   }
 
-  public async addJob(job: JobData, priority: number = 1): Promise<void> {
+  public async addJob(dto: JobCreateData, priority: number = 1): Promise<void> {
     if (this.connection.isClosed()) {
       throw new Error('Cannot add job when NATS connection is closed.')
     }
@@ -133,10 +134,23 @@ export class Queue {
       priority = 1
     }
 
+    const jobId = dto.id ?? `${crypto.randomUUID()}_${Date.now()}`
+    const job: Job = {
+      id: jobId,
+      queueName: dto.queueName,
+      name: dto.name,
+      data: dto.data,
+      meta: {
+        retryCount: 0,
+        startTime: Date.now() + (dto.delay ?? 0),
+        failed: false,
+        timeout: dto.timeout ?? 0,
+      },
+    }
     try {
       const jobData = new TextEncoder().encode(JSON.stringify(job))
       const msgHeaders = headers()
-      msgHeaders.set('Nats-Msg-Id', job.id)
+      msgHeaders.set('Nats-Msg-Id', jobId)
 
       await this.client.publish(
         `${job.queueName}.${job.name}.${priority}`,
@@ -145,14 +159,14 @@ export class Queue {
           headers: msgHeaders,
         },
       )
-      console.log(`JobData ID=${job.id} added successfully.`)
+      console.log(`JobData ID=${jobId} added successfully.`)
     } catch (e) {
-      console.error(`Failed to add job ID=${job.id}: ${e}`)
+      console.error(`Failed to add job ID=${jobId}: ${e}`)
       throw e
     }
   }
 
-  public async addJobs(jobs: JobData[], priority: number = 1): Promise<void> {
+  public async addJobs(jobs: Job[], priority: number = 1): Promise<void> {
     for (const job of jobs) {
       await this.addJob(job, priority)
     }
@@ -162,7 +176,7 @@ export class Queue {
     const traverse = async (
       node: FlowJob,
       parentId: string | null = null,
-    ): Promise<JobData[]> => {
+    ): Promise<Job[]> => {
       const currentJob = node.job
       if (parentId) {
         currentJob.meta.parentId = parentId
@@ -183,7 +197,7 @@ export class Queue {
         ),
       )
 
-      const deepestJobs: JobData[] = []
+      const deepestJobs: Job[] = []
       for (const child of children) {
         const traverseResult = await traverse(child, currentJob.id)
         deepestJobs.push(...traverseResult)
