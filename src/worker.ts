@@ -48,7 +48,7 @@ export type WorkerOpts = {
   priorities?: number
 }
 
-export class Worker extends EventEmitter {
+export class Worker {
   protected readonly client: JetStreamClient
   protected readonly name: string
   protected readonly processor: (job: JsMsg, timeout: number) => Promise<void>
@@ -75,8 +75,6 @@ export class Worker extends EventEmitter {
   > = new Map()
 
   constructor(opts: WorkerOpts) {
-    super()
-
     this.client = opts.client
     this.name = opts.name
     this.processor = opts.processor
@@ -113,7 +111,7 @@ export class Worker extends EventEmitter {
     try {
       this.manager = await this.client.jetstreamManager()
       const kvm = await new Kvm(this.client)
-      this.kv = await kvm.create(`${this.name}_parent_id`)
+      this.kv = await kvm.open(`${this.name}_parent_id`)
       this.consumers = await this.setupConsumers()
     } catch (e) {
       // TODO: Error handling?

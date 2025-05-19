@@ -1,18 +1,28 @@
 import {
   jetstream,
+  JetStreamApiError,
   JetStreamClient,
   JetStreamManager,
 } from '@nats-io/jetstream'
 import { JobData } from './worker' // Assuming JobData is defined in a separate file
 import { TextEncoder } from 'util'
 import { KV, Kvm } from '@nats-io/kv'
-import { headers, NatsConnection } from '@nats-io/nats-core'
+import { headers, nanos, NatsConnection } from '@nats-io/nats-core'
 
 const DEFAULT_DEDUPLICATE_WINDOW = 2000
+const MIN_DUPLICATE_WINDOW = 100
 
 type FlowJob = {
   job: JobData
   children?: FlowJob[]
+}
+
+type QueueOpts = {
+  connection: NatsConnection
+  name: string
+  priorities: number
+  duplicateWindow: number
+  client: JetStreamClient
 }
 
 export class Queue {
@@ -24,18 +34,23 @@ export class Queue {
   private duplicateWindow: number
   private kv: KV | null = null
 
-  constructor(
-    connection: NatsConnection,
-    name: string,
-    priorities: number = 1,
-    duplicateWindow: number = DEFAULT_DEDUPLICATE_WINDOW,
-    client: JetStreamClient,
-  ) {
+  constructor({
+    client,
+    name,
+    priorities = 1,
+    connection,
+    duplicateWindow = DEFAULT_DEDUPLICATE_WINDOW,
+  }: QueueOpts) {
     if (!name) {
       throw new Error("Parameter 'name' cannot be empty")
     }
     if (priorities <= 0) {
       throw new Error("Parameter 'priorities' must be greater than 0")
+    }
+    if (duplicateWindow < MIN_DUPLICATE_WINDOW) {
+      throw new Error(
+        `Parameter 'duplicateWindow' must be more than or equal to ${MIN_DUPLICATE_WINDOW}`,
+      )
     }
 
     this.client = client
@@ -58,21 +73,25 @@ export class Queue {
       await this.manager.streams.add({
         name: this.name,
         subjects: subjects,
-        duplicate_window: this.duplicateWindow,
+        duplicate_window: nanos(this.duplicateWindow),
       })
       console.log(`Stream '${this.name}' created successfully.`)
 
       const kvm = await new Kvm(this.connection)
       this.kv = await kvm.create(`${this.name}_parent_id`)
     } catch (e) {
-      // TODO: Should be badrequest error or something
-      if (e instanceof Error) {
+      if (e instanceof JetStreamApiError) {
+        const jsError = e.apiError()
+        if (jsError.err_code !== 10058) {
+          throw e
+        }
+
         console.error(
           `Stream '${this.name}' already exists. Attempting to update`,
         )
         await this.manager!.streams.update(this.name, {
           subjects: [`${this.name}.*.*`],
-          duplicate_window: this.duplicateWindow,
+          duplicate_window: nanos(this.duplicateWindow),
         })
         console.log(`Stream '${this.name}' updated successfully.`)
       } else {

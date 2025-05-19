@@ -111,6 +111,7 @@ describe('Worker.setup()', () => {
 
     try {
       await worker.setup()
+      assert.fail('Expected error')
     } catch (e) {
       if (e instanceof JetStreamApiError) {
         assert(e.name === 'StreamNotFoundError', 'StreamNotFoundError expected')
