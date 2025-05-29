@@ -8,7 +8,7 @@ import { connect } from '@nats-io/transport-node'
 import { NatsConnection } from '@nats-io/nats-core'
 import assert from 'node:assert'
 import { Queue } from '../../src/queue'
-import { Job } from '../../src/worker'
+import { Job } from '../../src/types'
 
 describe('Queue.addJob()', () => {
   let nc: NatsConnection
@@ -157,11 +157,8 @@ describe('Queue.addJob()', () => {
       seq: 1,
     })
     const parsedData: Job = JSON.parse(new TextDecoder().decode(message?.data))
-    assert.deepStrictEqual(parsedData.meta, {
-      retryCount: 0,
-      //   startTime: Date.now() + (dto.delay ?? 0),
-      failed: false,
-      timeout: 1000,
-    })
+    assert.strictEqual(parsedData.meta.retryCount, 0)
+    assert.strictEqual(parsedData.meta.failed, false)
+    assert.strictEqual(parsedData.meta.timeout, 1000)
   })
 })

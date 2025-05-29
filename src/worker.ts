@@ -5,40 +5,15 @@ import {
   AckPolicy,
   JetStreamManager,
   ConsumerMessages,
-  JetStreamApiError,
 } from '@nats-io/jetstream'
 import { KV, Kvm } from '@nats-io/kv'
-import EventEmitter from 'events'
 import { RateLimit } from '.'
 import { Limiter, FixedWindowLimiter, IntervalLimiter } from './limiter'
 import { sleep } from './utils'
 import { headers, TimeoutError } from '@nats-io/nats-core'
+import { Job, ParentJob } from './types'
 
 // TODO: Maybe add Pino logger
-
-export type Job = {
-  id: string
-  name: string
-  meta: {
-    failed: boolean
-    startTime: number
-    retryCount: number
-    timeout: number
-    parentId?: string
-  }
-  data: unknown
-  // Why does job need to know about the queue name?
-  queueName: string
-}
-
-export type JobCreateData = {
-  name: string
-  data: unknown
-  queueName: string
-  id?: string
-  delay?: number
-  timeout?: number
-}
 
 export type WorkerOpts = {
   client: JetStreamClient
@@ -293,10 +268,10 @@ export class Worker {
       if (parentId) {
         const parentJob = await this.kv!.get(parentId)
         if (parentJob) {
-          const parentJobData = JSON.parse(
+          const parentJobData: ParentJob = JSON.parse(
             new TextDecoder().decode(parentJob.value),
           )
-          parentJobData.children_count -= 1
+          parentJobData.childrenCount -= 1
 
           // TODO: Race condition?
           await this.kv!.put(
@@ -304,7 +279,7 @@ export class Worker {
             new TextEncoder().encode(JSON.stringify(parentJobData)),
           )
 
-          if (parentJobData.children_count === 0) {
+          if (parentJobData.childrenCount === 0) {
             await this.kv!.delete(parentId)
             await this.publishParentJob(parentJobData)
           }
