@@ -8,6 +8,7 @@ import { connect } from '@nats-io/transport-node'
 import { NatsConnection } from '@nats-io/nats-core'
 import assert from 'node:assert'
 import { Queue } from '../../src/queue'
+import { Job } from '../../src/job'
 
 describe('Queue.addJobs()', () => {
   let nc: NatsConnection
@@ -44,26 +45,22 @@ describe('Queue.addJobs()', () => {
   })
 
   it('should add multiple jobs', async () => {
-    await queue!.addJobs(
-      [
-        {
-          name: 'test',
-          queueName: queueName,
-          data: {},
-        },
-        {
-          name: 'test-2',
-          queueName: queueName,
-          data: {},
-        },
-        {
-          name: 'test-3',
-          queueName: queueName,
-          data: {},
-        },
-      ],
-      2,
-    )
+    const job1 = new Job({
+      name: 'test',
+      queueName: queueName,
+      data: {},
+    })
+    const job2 = new Job({
+      name: 'test',
+      queueName: queueName,
+      data: {},
+    })
+    const job3 = new Job({
+      name: 'test',
+      queueName: queueName,
+      data: {},
+    })
+    await queue!.addJobs([job1, job2, job3], 2)
 
     const stream = await jsm.streams.get(queueName)
     const streamInfo = await stream.info()

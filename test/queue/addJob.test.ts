@@ -8,7 +8,7 @@ import { connect } from '@nats-io/transport-node'
 import { NatsConnection } from '@nats-io/nats-core'
 import assert from 'node:assert'
 import { Queue } from '../../src/queue'
-import { Job } from '../../src/types'
+import { Job } from '../../src/job'
 
 describe('Queue.addJob()', () => {
   let nc: NatsConnection
@@ -45,11 +45,12 @@ describe('Queue.addJob()', () => {
   })
 
   it('should add job', async () => {
-    await queue!.addJob({
+    const job = new Job({
       name: 'test',
       queueName: queueName,
       data: {},
     })
+    await queue!.addJob(job)
 
     const stream = await jsm.streams.get(queueName)
     const streamInfo = await stream.info()
@@ -57,14 +58,12 @@ describe('Queue.addJob()', () => {
   })
 
   it('should add job with priority', async () => {
-    await queue!.addJob(
-      {
-        name: 'test',
-        queueName: queueName,
-        data: {},
-      },
-      2,
-    )
+    const job = new Job({
+      name: 'test',
+      queueName: queueName,
+      data: {},
+    })
+    await queue!.addJob(job, 2)
 
     const message = await jsm.streams.getMessage(queueName, {
       seq: 1,
@@ -73,14 +72,12 @@ describe('Queue.addJob()', () => {
   })
 
   it('should limit job priority to queues max priority', async () => {
-    await queue!.addJob(
-      {
-        name: 'test',
-        queueName: queueName,
-        data: {},
-      },
-      queueMaxPriority + 1,
-    )
+    const job = new Job({
+      name: 'test',
+      queueName: queueName,
+      data: {},
+    })
+    await queue!.addJob(job, queueMaxPriority + 1)
 
     const message = await jsm.streams.getMessage(queueName, {
       seq: 1,
@@ -98,14 +95,12 @@ describe('Queue.addJob()', () => {
         test: 'test42',
       },
     }
-    await queue!.addJob(
-      {
-        name: 'test',
-        queueName: queueName,
-        data: data,
-      },
-      queueMaxPriority + 1,
-    )
+    const job = new Job({
+      name: 'test',
+      queueName: queueName,
+      data: data,
+    })
+    await queue!.addJob(job, queueMaxPriority + 1)
 
     const message = await jsm.streams.getMessage(queueName, {
       seq: 1,
@@ -115,21 +110,13 @@ describe('Queue.addJob()', () => {
   })
 
   it('should deduplicate jobs', async () => {
-    await queue!.addJob({
-      id: 'test1',
+    const job = new Job({
       name: 'test',
       queueName: queueName,
       data: {},
     })
-    await queue!.addJob(
-      {
-        id: 'test1',
-        name: 'test',
-        queueName: queueName,
-        data: {},
-      },
-      queueMaxPriority,
-    )
+    await queue!.addJob(job)
+    await queue!.addJob(job, queueMaxPriority)
 
     const stream = await jsm.streams.get(queueName)
     const streamInfo = await stream.info()
@@ -137,21 +124,18 @@ describe('Queue.addJob()', () => {
   })
 
   it('should add job with correct meta', async () => {
-    const data = {
-      test1: 25,
-      test2: {
-        test: 'test42',
+    const job = new Job({
+      name: 'test',
+      queueName: queueName,
+      timeout: 1000,
+      data: {
+        test1: 25,
+        test2: {
+          test: 'test42',
+        },
       },
-    }
-    await queue!.addJob(
-      {
-        name: 'test',
-        queueName: queueName,
-        data: data,
-        timeout: 1000,
-      },
-      queueMaxPriority + 1,
-    )
+    })
+    await queue!.addJob(job, queueMaxPriority + 1)
 
     const message = await jsm.streams.getMessage(queueName, {
       seq: 1,
