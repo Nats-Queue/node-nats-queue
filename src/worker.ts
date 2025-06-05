@@ -207,6 +207,7 @@ export class Worker {
         }
 
         const maxJobs = this.limiter.get(this.concurrency - this.processingNow)
+        console.log('maxJobs', maxJobs)
         if (maxJobs <= 0) break
 
         jobs = await this.fetch(this.consumers[i], maxJobs)
@@ -216,6 +217,7 @@ export class Worker {
         if (this.priorityQuota)
           this.priorityQuota.get(consumerPriority)!.counter += 1
 
+        console.log('process job from consumer', consumerPriority)
         this.limiter.inc()
         this.processTask(j)
       }
@@ -351,6 +353,7 @@ export class Worker {
     // TODO: Maybe fail to fetch consumer info
     const consumerInfo = await consumer.info()
     try {
+      console.log('max messages', count)
       const msgs = await consumer.fetch({
         max_messages: count,
         expires: this.fetchTimeout,

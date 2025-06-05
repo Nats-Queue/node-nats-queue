@@ -142,7 +142,9 @@ export class Queue {
           headers: msgHeaders,
         },
       )
-      console.log(`JobData ID=${job.id} added successfully.`)
+      console.log(
+        `JobData ID=${job.id} added successfully. Subject: ${job.queueName}.${job.name}.${priority}`,
+      )
     } catch (e) {
       console.error(`Failed to add job ID=${job.id}: ${e}`)
       throw e
