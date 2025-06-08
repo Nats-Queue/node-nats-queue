@@ -12,6 +12,11 @@ import { sleep } from './utils'
 import { headers, TimeoutError } from '@nats-io/nats-core'
 import { Job } from './job'
 import { ParentJob } from './types'
+import {
+  JobChildCompletedEvent,
+  JobCompletedEvent,
+  JobFailedEvent,
+} from './jobEvent'
 
 // TODO: Maybe add Pino logger
 
@@ -50,6 +55,7 @@ export class Worker {
   protected running = false
   protected processingNow = 0
   protected loopPromise: Promise<void> | null = null
+  protected jobEventLoopPromise: Promise<void> | null = null
   protected kv: KV | null = null
   protected priorityQuota?: Map<
     number,
@@ -58,6 +64,7 @@ export class Worker {
       counter: number
     }
   > = new Map()
+  protected jobCompletedConsumer: Consumer | null = null
 
   constructor(opts: WorkerOpts) {
     this.client = opts.client
@@ -98,6 +105,36 @@ export class Worker {
       const kvm = await new Kvm(this.client)
       this.kv = await kvm.open(`${this.name}_parent_id`)
       this.consumers = await this.setupConsumers()
+
+      // TODO: What about deduplication
+      // Create streams for completed jobs and failed jobs
+      await this.manager.streams.add({
+        name: `${this.name}_completed`,
+        subjects: [`${this.name}_completed`],
+      })
+      await this.manager.streams.add({
+        name: `${this.name}_failed`,
+        subjects: [`${this.name}_failed`],
+      })
+
+      // Create streams for parent notification
+      await this.manager.streams.add({
+        name: `${this.name}_parent_notification`,
+        subjects: [`${this.name}_parent_notification`],
+      })
+
+      await this.manager!.consumers.add(`${this.name}_completed`, {
+        filter_subject: `${this.name}_completed`,
+        name: `job_completed_consumer`,
+        durable_name: `job_completed_consumer`,
+        ack_policy: AckPolicy.All,
+      })
+
+      const jobCompletedConsumer = await this.client.consumers.get(
+        `${this.name}_completed`,
+        `job_completed_consumer`,
+      )
+      this.jobCompletedConsumer = jobCompletedConsumer
     } catch (e) {
       // TODO: Error handling?
       console.error(
@@ -105,6 +142,71 @@ export class Worker {
       )
       throw e
     }
+  }
+
+  private async publishJobCompletedEvent(job: Job) {
+    const subject = `${this.name}_completed`
+    const messageHeaders = headers()
+    messageHeaders.set('Nats-Msg-Id', crypto.randomUUID())
+    const event: JobCompletedEvent = {
+      event: 'JOB_COMPLETED',
+      data: {
+        jobId: job.id,
+      },
+    }
+    await this.client.publish(
+      subject,
+      new TextEncoder().encode(JSON.stringify(event)),
+      {
+        headers: messageHeaders,
+      },
+    )
+    console.log(`Job completed event published to subject=${subject}`)
+  }
+
+  private async publishJobFailedEvent(job: Job) {
+    const subject = `${this.name}_failed`
+    const messageHeaders = headers()
+    messageHeaders.set('Nats-Msg-Id', crypto.randomUUID())
+    const event: JobFailedEvent = {
+      event: 'JOB_FAILED',
+      data: {
+        jobId: job.id,
+      },
+    }
+    await this.client.publish(
+      subject,
+      new TextEncoder().encode(JSON.stringify(event)),
+      {
+        headers: messageHeaders,
+      },
+    )
+    console.log(`Job failed event published to subject=${subject}`)
+  }
+
+  private async publishChildJobCompletedEvent(job: Job) {
+    if (job.meta.parentId === undefined) return
+
+    const subject = `${this.name}_parent_notification`
+    const messageHeaders = headers()
+    messageHeaders.set('Nats-Msg-Id', crypto.randomUUID())
+    const event: JobChildCompletedEvent = {
+      event: 'JOB_CHILD_COMPLETED',
+      data: {
+        childId: job.id,
+        parentId: job.meta?.parentId,
+      },
+    }
+    await this.client.publish(
+      subject,
+      new TextEncoder().encode(JSON.stringify(event)),
+      {
+        headers: messageHeaders,
+      },
+    )
+    console.log(
+      `Child job completed event published to subject=${subject} for job id=${job.id}`,
+    )
   }
 
   private async setupConsumers(): Promise<Consumer[]> {
@@ -148,6 +250,7 @@ export class Worker {
 
     if (this.loopPromise) {
       await this.loopPromise
+      await this.jobEventLoopPromise
     }
     while (this.processingNow > 0) {
       await sleep(this.fetchInterval)
@@ -162,6 +265,7 @@ export class Worker {
     if (!this.loopPromise) {
       this.running = true
       this.loopPromise = this.loop()
+      this.jobEventLoopPromise = this.jobEventsLoop()
     }
   }
 
@@ -227,6 +331,27 @@ export class Worker {
     }
   }
 
+  protected async jobEventsLoop() {
+    while (this.running) {
+      const jobCompletedEvents = await this.jobCompletedConsumer!.fetch({
+        max_messages: 1,
+      })
+      for await (const j of jobCompletedEvents) {
+        const eventData = JSON.parse(new TextDecoder().decode(j.data))
+        if (eventData.event === 'JOB_COMPLETED') {
+          const jobId = eventData.data.jobId
+          console.log(`Job completed event received for job id=${jobId}`)
+          await j.ackAck()
+        } else {
+          console.warn(
+            `Unknown event type: ${eventData.event} for job id=${eventData.data.jobId}`,
+          )
+        }
+      }
+      await sleep(100)
+    }
+  }
+
   protected async processTask(j: JsMsg) {
     this.processingNow += 1
     const data: Job = JSON.parse(new TextDecoder().decode(j.data))
@@ -253,6 +378,7 @@ export class Worker {
           `Job: name=${data.name} id=${data.id} failed max retries exceeded`,
         )
 
+        await this.publishJobFailedEvent(data)
         await this.markParentsFailed(data)
         return
       }
@@ -267,9 +393,12 @@ export class Worker {
       await j.ackAck()
       console.log(`Job: name=${data.name} id=${data.id} is completed`)
 
+      await this.publishJobCompletedEvent(data)
+
       const parentId = data.meta?.parentId
       if (parentId) {
         const parentJob = await this.kv!.get(parentId)
+        await this.publishChildJobCompletedEvent(data)
         if (parentJob) {
           const parentJobData: ParentJob = JSON.parse(
             new TextDecoder().decode(parentJob.value),

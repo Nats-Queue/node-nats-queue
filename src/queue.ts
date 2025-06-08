@@ -4,8 +4,8 @@ import {
   JetStreamClient,
   JetStreamManager,
 } from '@nats-io/jetstream'
-import { JobCreateData, FlowJob, FlowJobCreateData } from './types' // Assuming JobData is defined in a separate file
 import { Job } from './job'
+import { FlowJob } from './flowJob'
 import { TextEncoder } from 'util'
 import { KV, Kvm } from '@nats-io/kv'
 import { headers, nanos, NatsConnection } from '@nats-io/nats-core'
