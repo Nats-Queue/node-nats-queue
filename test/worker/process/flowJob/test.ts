@@ -19,8 +19,9 @@ import {
 import { Job } from '../../../../src/job'
 import assert from 'assert'
 import { sleep } from '../../../../src/utils'
+import { FlowJob } from '../../../../src/flowJob'
 
-describe('Worker.process(): common', () => {
+describe('Worker.process(): flowJob', () => {
   let nc: NatsConnection
   let js: JetStreamClient
   let jsm: JetStreamManager
@@ -74,27 +75,53 @@ describe('Worker.process(): common', () => {
     await nc.close()
   })
 
-  it('should process job', async () => {
+  it('should notify process parent after all children were processed', async () => {
     await worker!.start()
-    const job = new Job({
-      id: 'job1',
-      name: 'job1',
+    const child1 = new Job({
+      id: 'child1',
+      name: 'child1',
+      queueName: queueName,
+      data: {
+        message: 42,
+      },
+    })
+    const child2 = new Job({
+      id: 'child2',
+      name: 'child2',
+      queueName: queueName,
+      data: {
+        message: 42,
+      },
+    })
+    const parentJob = new Job({
+      id: 'parentJob',
+      name: 'parentJob',
       queueName: queueName,
       data: {
         message: 42,
       },
     })
 
-    await queue!.addJob(job)
+    const flowJobChild1 = new FlowJob({
+      job: child1,
+      children: [],
+    })
+    const flowJobChild2 = new FlowJob({
+      job: child2,
+      children: [],
+    })
+    const flowJobParent = new FlowJob({
+      job: parentJob,
+      children: [flowJobChild1, flowJobChild2],
+    })
 
-    await sleep(100) // Wait for job to be processed
+    await queue!.addFlowJob(flowJobParent)
 
-    assert.strictEqual(processorMock.mock.calls.length, 1)
+    await sleep(2000) // Wait for job to be processed
 
-    const processedJob: Job = processorMock.mock.calls[0].arguments[0].json()
-    assert(processedJob.id === job.id)
-    assert(processedJob.name === job.name)
-    assert(processedJob.queueName === job.queueName)
-    assert.deepStrictEqual(processedJob.data, job.data)
+    assert.strictEqual(processorMock.mock.calls.length, 3)
+
+    const processedParent: Job = processorMock.mock.calls[2].arguments[0].json()
+    assert(processedParent.id === flowJobParent.job.id)
   })
 })
