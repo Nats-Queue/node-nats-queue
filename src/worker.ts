@@ -29,6 +29,8 @@ export type WorkerOpts = {
   >
   maxRetries?: number
   priorities?: number
+  fetchInterval?: number
+  fetchTimeout?: number
 }
 
 export class Worker {
@@ -65,8 +67,8 @@ export class Worker {
     this.maxRetries = opts.maxRetries || 3
     this.priorities = opts.priorities || 1
 
-    this.fetchInterval = 150
-    this.fetchTimeout = 3_000
+    this.fetchInterval = opts.fetchInterval ?? 150
+    this.fetchTimeout = opts.fetchTimeout ?? 3_000
     this.limiter = opts.rateLimit
       ? new FixedWindowLimiter(
           opts.rateLimit.max,
@@ -207,7 +209,6 @@ export class Worker {
         }
 
         const maxJobs = this.limiter.get(this.concurrency - this.processingNow)
-
         if (maxJobs <= 0) break
 
         jobs = await this.fetch(this.consumers[i], maxJobs)
