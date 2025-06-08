@@ -4,14 +4,14 @@ import {
   Consumer,
   AckPolicy,
   JetStreamManager,
-  ConsumerMessages,
 } from '@nats-io/jetstream'
 import { KV, Kvm } from '@nats-io/kv'
-import { RateLimit } from '.'
+import { RateLimit } from './types'
 import { Limiter, FixedWindowLimiter, IntervalLimiter } from './limiter'
 import { sleep } from './utils'
 import { headers, TimeoutError } from '@nats-io/nats-core'
-import { Job, ParentJob } from './types'
+import { Job } from './job'
+import { ParentJob } from './types'
 
 // TODO: Maybe add Pino logger
 

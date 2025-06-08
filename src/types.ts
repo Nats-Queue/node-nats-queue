@@ -1,17 +1,4 @@
-export type Job = {
-  id: string
-  name: string
-  meta: {
-    failed: boolean
-    startTime: number
-    retryCount: number
-    timeout: number
-    parentId?: string
-  }
-  data: unknown
-  // Why does job need to know about the queue name?
-  queueName: string
-}
+import { Job } from './job'
 
 export type ParentJob = Job & {
   childrenCount: number
@@ -26,12 +13,12 @@ export type JobCreateData = {
   timeout?: number
 }
 
-export type FlowJob = {
-  job: Job
-  children?: FlowJob[]
-}
-
 export type FlowJobCreateData = {
   job: JobCreateData
   children?: FlowJobCreateData[]
+}
+
+export type RateLimit = {
+  duration: number
+  max: number
 }
