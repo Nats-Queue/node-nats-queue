@@ -124,7 +124,7 @@ export class Worker {
             consumerName,
           )
           console.log(
-            `Consumer: name=${this.name} successfully subscribed to topic ${subject}.`,
+            `Consumer: name=${consumerName} successfully subscribed to topic ${subject} in queue ${this.name}`,
           )
           consumers.push(consumer)
         } catch (e) {
@@ -193,7 +193,7 @@ export class Worker {
 
   protected async loop() {
     while (this.running) {
-      let jobs: ConsumerMessages | never[] = []
+      let jobs: JsMsg[] = []
       let consumerPriority = 0
       for (let i = 0; i < this.consumers.length; i++) {
         consumerPriority = i + 1
@@ -207,17 +207,17 @@ export class Worker {
         }
 
         const maxJobs = this.limiter.get(this.concurrency - this.processingNow)
-        console.log('maxJobs', maxJobs)
+
         if (maxJobs <= 0) break
 
         jobs = await this.fetch(this.consumers[i], maxJobs)
+        if (jobs.length > 0) break
       }
 
-      for await (const j of jobs) {
+      for (const j of jobs) {
         if (this.priorityQuota)
           this.priorityQuota.get(consumerPriority)!.counter += 1
 
-        console.log('process job from consumer', consumerPriority)
         this.limiter.inc()
         this.processTask(j)
       }
@@ -346,26 +346,25 @@ export class Worker {
     )
   }
 
-  protected async fetch(
-    consumer: Consumer,
-    count: number,
-  ): Promise<ConsumerMessages | never[]> {
+  protected async fetch(consumer: Consumer, count: number): Promise<JsMsg[]> {
     // TODO: Maybe fail to fetch consumer info
     const consumerInfo = await consumer.info()
     try {
-      console.log('max messages', count)
       const msgs = await consumer.fetch({
         max_messages: count,
         expires: this.fetchTimeout,
       })
+      const awaitedMessages: JsMsg[] = []
+
+      for await (const msg of msgs) {
+        awaitedMessages.push(msg)
+      }
+
       console.debug(
-        `Consumer: name=${
-          consumerInfo.name
-          // TODO: How to count fetched messages?
-        } fetched ${'msgs.length'} messages from queue=${this.name}`,
+        `Consumer: name=${consumerInfo.name} fetched ${awaitedMessages.length} messages from queue=${this.name}`,
       )
 
-      return msgs
+      return awaitedMessages
     } catch (e) {
       if (e instanceof TimeoutError) {
         console.debug(
