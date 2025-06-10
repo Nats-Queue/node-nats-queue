@@ -20,6 +20,7 @@ import { Job } from '../../../../src/job'
 import assert from 'assert'
 import { sleep } from '../../../../src/utils'
 import { FlowJob } from '../../../../src/flowJob'
+import { FlowQueue } from '../../../../src/flowQueue'
 
 describe('Worker.process(): flowJob', () => {
   let nc: NatsConnection
@@ -28,7 +29,7 @@ describe('Worker.process(): flowJob', () => {
   const queueName = 'queue'
   const queueMaxPriority = 3
   const maxRetries = 2
-  let queue: Queue | undefined = undefined
+  let queue: FlowQueue | undefined = undefined
   let worker: Worker | undefined = undefined
   let processorMock: ReturnType<
     typeof mock.fn<(job: JsMsg, timeout: number) => Promise<void>>
@@ -47,7 +48,7 @@ describe('Worker.process(): flowJob', () => {
       async (job, timeout) => {},
     )
 
-    queue = new Queue({
+    queue = new FlowQueue({
       name: queueName,
       client: js,
       connection: nc,

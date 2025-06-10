@@ -65,6 +65,8 @@ export class Worker {
     }
   > = new Map()
   protected jobCompletedConsumer: Consumer | null = null
+  protected jobFailedConsumer: Consumer | null = null
+  protected parentNotificationConsumer: Consumer | null = null
 
   constructor(opts: WorkerOpts) {
     this.client = opts.client
@@ -106,35 +108,8 @@ export class Worker {
       this.kv = await kvm.open(`${this.name}_parent_id`)
       this.consumers = await this.setupConsumers()
 
-      // TODO: What about deduplication
-      // Create streams for completed jobs and failed jobs
-      await this.manager.streams.add({
-        name: `${this.name}_completed`,
-        subjects: [`${this.name}_completed`],
-      })
-      await this.manager.streams.add({
-        name: `${this.name}_failed`,
-        subjects: [`${this.name}_failed`],
-      })
-
-      // Create streams for parent notification
-      await this.manager.streams.add({
-        name: `${this.name}_parent_notification`,
-        subjects: [`${this.name}_parent_notification`],
-      })
-
-      await this.manager!.consumers.add(`${this.name}_completed`, {
-        filter_subject: `${this.name}_completed`,
-        name: `job_completed_consumer`,
-        durable_name: `job_completed_consumer`,
-        ack_policy: AckPolicy.All,
-      })
-
-      const jobCompletedConsumer = await this.client.consumers.get(
-        `${this.name}_completed`,
-        `job_completed_consumer`,
-      )
-      this.jobCompletedConsumer = jobCompletedConsumer
+      await this.setupInternalQueues(this.manager)
+      await this.setupInternalQueuesConsumers(this.manager)
     } catch (e) {
       // TODO: Error handling?
       console.error(
@@ -142,6 +117,68 @@ export class Worker {
       )
       throw e
     }
+  }
+
+  private async setupInternalQueues(manager: JetStreamManager) {
+    // TODO: What about deduplication
+    // Create streams for completed jobs and failed jobs
+
+    // Completed queue
+    await manager.streams.add({
+      name: `${this.name}_completed`,
+      subjects: [`${this.name}_completed`],
+    })
+
+    // Failed queue
+    await manager.streams.add({
+      name: `${this.name}_failed`,
+      subjects: [`${this.name}_failed`],
+    })
+
+    // Parent notification
+    await manager.streams.add({
+      name: `${this.name}_parent_notification`,
+      subjects: [`${this.name}_parent_notification`],
+    })
+  }
+
+  private async setupInternalQueuesConsumers(manager: JetStreamManager) {
+    // TODO: What about deduplication
+    // Create streams for completed jobs and failed jobs
+
+    await this.manager!.consumers.add(`${this.name}_completed`, {
+      filter_subject: `${this.name}_completed`,
+      name: `job_completed_consumer`,
+      durable_name: `job_completed_consumer`,
+      ack_policy: AckPolicy.All,
+    })
+
+    await this.manager!.consumers.add(`${this.name}_failed`, {
+      filter_subject: `${this.name}_failed`,
+      name: `job_failed_consumer`,
+      durable_name: `job_failed_consumer`,
+      ack_policy: AckPolicy.All,
+    })
+
+    await this.manager!.consumers.add(`${this.name}_parent_notification`, {
+      filter_subject: `${this.name}_parent_notification`,
+      name: `parent_notification_consumer`,
+      durable_name: `parent_notification_consumer`,
+      ack_policy: AckPolicy.All,
+    })
+
+    this.jobCompletedConsumer = await this.client.consumers.get(
+      `${this.name}_completed`,
+      `job_completed_consumer`,
+    )
+    this.jobFailedConsumer = await this.client.consumers.get(
+      `${this.name}_failed`,
+      `job_failed_consumer`,
+    )
+    this.parentNotificationConsumer = await this.client.consumers.get(
+      `${this.name}_parent_notification`,
+      `parent_notification_consumer`,
+    )
   }
 
   private async publishJobCompletedEvent(job: Job) {
@@ -265,7 +302,7 @@ export class Worker {
     if (!this.loopPromise) {
       this.running = true
       this.loopPromise = this.loop()
-      this.jobEventLoopPromise = this.jobEventsLoop()
+      // this.jobEventLoopPromise = this.jobEventsLoop()
     }
   }
 
@@ -333,29 +370,34 @@ export class Worker {
 
   protected async jobEventsLoop() {
     while (this.running) {
-      const jobCompletedEvents = await this.jobCompletedConsumer!.fetch({
-        max_messages: 1,
-      })
-      for await (const j of jobCompletedEvents) {
-        const eventData = JSON.parse(new TextDecoder().decode(j.data))
-        if (eventData.event === 'JOB_COMPLETED') {
-          const jobId = eventData.data.jobId
-          console.log(`Job completed event received for job id=${jobId}`)
-          await j.ackAck()
-        } else {
-          console.warn(
-            `Unknown event type: ${eventData.event} for job id=${eventData.data.jobId}`,
-          )
-        }
-      }
+      const [jobCompletedEvents, jobFailedEvents, childJobCompletedEvents] =
+        await Promise.all([
+          this.fetch(this.jobCompletedConsumer!, 1),
+          this.fetch(this.jobFailedConsumer!, 1),
+          this.fetch(this.parentNotificationConsumer!, 1),
+        ])
+
+      jobCompletedEvents.forEach((j) => this.processJobCompletedEvent(j))
+      jobFailedEvents.forEach((j) => this.processJobFailedEvent(j))
+      childJobCompletedEvents.forEach((j) =>
+        this.processChildJobCompletedEvent(j),
+      )
       await sleep(100)
     }
   }
 
+  // TODO: Implement these methods to handle job events
+  protected async processJobCompletedEvent(j: JsMsg) {}
+
+  // TODO: Implement these methods to handle job events
+  protected async processJobFailedEvent(j: JsMsg) {}
+
+  // TODO: Implement these methods to handle job events
+  protected async processChildJobCompletedEvent(j: JsMsg) {}
+
   protected async processTask(j: JsMsg) {
     this.processingNow += 1
     const data: Job = JSON.parse(new TextDecoder().decode(j.data))
-
     try {
       if (data.meta.failed) {
         await j.term()
@@ -424,7 +466,7 @@ export class Worker {
         )
       } else {
         console.error(
-          `Error while processing job id=${data.id}: ${e} start retry`,
+          `Error while processing job id=${data.id}: "${e}" start retry`,
         )
       }
 
