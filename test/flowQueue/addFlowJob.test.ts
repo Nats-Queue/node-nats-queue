@@ -15,18 +15,18 @@ import {
 import { connect } from '@nats-io/transport-node'
 import { NatsConnection } from '@nats-io/nats-core'
 import assert from 'node:assert'
-import { Queue } from '../../src/queue'
+import { FlowQueue } from '../../src/flowQueue'
 import { FlowJob } from '../../src/flowJob'
 import { Job } from '../../src/job'
 import { Kvm } from '@nats-io/kv'
 
-describe('Queue.addFlowJob()', () => {
+describe('FlowQueue.addFlowJob()', () => {
   let nc: NatsConnection
   let js: JetStreamClient
   let jsm: JetStreamManager
   const queueName = 'queue'
   const queueMaxPriority = 3
-  let queue: Queue | undefined = undefined
+  let queue: FlowQueue | undefined = undefined
 
   before(async () => {
     nc = await connect({ servers: '127.0.0.1:4222' })
@@ -36,7 +36,7 @@ describe('Queue.addFlowJob()', () => {
   })
 
   beforeEach(async () => {
-    queue = new Queue({
+    queue = new FlowQueue({
       name: queueName,
       client: js,
       connection: nc,

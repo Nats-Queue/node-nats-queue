@@ -22,13 +22,12 @@ type QueueOpts = {
 }
 
 export class Queue {
-  private name: string
+  protected name: string
   private priorities: number
-  private connection: NatsConnection
+  protected connection: NatsConnection
   private client: JetStreamClient
-  private manager: JetStreamManager | null = null
-  private duplicateWindow: number
-  private kv: KV | null = null
+  protected manager: JetStreamManager | null = null
+  protected duplicateWindow: number
 
   constructor({
     client,
@@ -72,9 +71,6 @@ export class Queue {
         duplicate_window: nanos(this.duplicateWindow),
       })
       console.log(`Stream '${this.name}' created successfully.`)
-
-      const kvm = await new Kvm(this.connection)
-      this.kv = await kvm.create(`${this.name}_parent_id`)
     } catch (e) {
       if (e instanceof JetStreamApiError) {
         const jsError = e.apiError()
@@ -151,43 +147,5 @@ export class Queue {
     for (const job of jobs) {
       await this.addJob(job, priority)
     }
-  }
-
-  public async addFlowJob(tree: FlowJob, priority: number = 1): Promise<void> {
-    const deepestJobs = await this.traverseJobTree(tree)
-    await this.addJobs(deepestJobs, priority)
-  }
-
-  private async traverseJobTree(
-    node: FlowJob,
-    parentId: string | null = null,
-  ): Promise<Job[]> {
-    const currentJob = node.job
-    if (parentId) {
-      currentJob.meta.parentId = parentId
-    }
-
-    const children = node.children || []
-    if (children.length === 0) {
-      return [currentJob]
-    }
-
-    await this.kv!.put(
-      currentJob.id,
-      new TextEncoder().encode(
-        JSON.stringify({
-          ...currentJob,
-          childrenCount: children.length,
-        }),
-      ),
-    )
-
-    const deepestJobs: Job[] = []
-    for (const child of children) {
-      const traverseResult = await this.traverseJobTree(child, currentJob.id)
-      deepestJobs.push(...traverseResult)
-    }
-
-    return deepestJobs
   }
 }
