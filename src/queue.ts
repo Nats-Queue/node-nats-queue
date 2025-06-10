@@ -65,7 +65,7 @@ export class Queue {
       const jetstreamClient = jetstream(this.connection)
       this.manager = await jetstreamClient.jetstreamManager()
 
-      const subjects = [`${this.name}.*.*`]
+      const subjects = [`${this.name}.*`]
       await this.manager.streams.add({
         name: this.name,
         subjects: subjects,
@@ -86,7 +86,7 @@ export class Queue {
           `Stream '${this.name}' already exists. Attempting to update`,
         )
         await this.manager!.streams.update(this.name, {
-          subjects: [`${this.name}.*.*`],
+          subjects: [`${this.name}.*`],
           duplicate_window: nanos(this.duplicateWindow),
         })
         console.log(`Stream '${this.name}' updated successfully.`)
@@ -135,15 +135,11 @@ export class Queue {
       const msgHeaders = headers()
       msgHeaders.set('Nats-Msg-Id', job.id)
 
-      await this.client.publish(
-        `${job.queueName}.${job.name}.${priority}`,
-        jobData,
-        {
-          headers: msgHeaders,
-        },
-      )
+      await this.client.publish(`${job.queueName}.${priority}`, jobData, {
+        headers: msgHeaders,
+      })
       console.log(
-        `JobData ID=${job.id} added successfully. Subject: ${job.queueName}.${job.name}.${priority}`,
+        `JobData ID=${job.id} added successfully. Subject: ${job.queueName}.${priority}`,
       )
     } catch (e) {
       console.error(`Failed to add job ID=${job.id}: ${e}`)

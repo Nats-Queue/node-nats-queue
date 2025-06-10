@@ -11,7 +11,6 @@ export class Job {
     parentId?: string
   }
   data: unknown
-  // Why does job need to know about the queue name?
   queueName: string
 
   constructor(data: JobCreateData) {

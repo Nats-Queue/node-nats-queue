@@ -214,7 +214,7 @@ export class Worker {
     for (let i = 1; i <= this.priorities; i++) {
       // TODO: Naming might be wrong, independent of the queue name
       const consumerName = `worker_group_${i}`
-      const subject = `${this.name}.*.${i}`
+      const subject = `${this.name}.${i}`
       try {
         await this.manager!.consumers.add(this.name, {
           filter_subject: subject,

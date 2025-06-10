@@ -68,7 +68,7 @@ describe('Queue.addJob()', () => {
     const message = await jsm.streams.getMessage(queueName, {
       seq: 1,
     })
-    assert.strictEqual(message?.subject, `${queueName}.test.2`)
+    assert.strictEqual(message?.subject, `${queueName}.2`)
   })
 
   it('should limit job priority to queues max priority', async () => {
@@ -82,10 +82,7 @@ describe('Queue.addJob()', () => {
     const message = await jsm.streams.getMessage(queueName, {
       seq: 1,
     })
-    assert.strictEqual(
-      message?.subject,
-      `${queueName}.test.${queueMaxPriority}`,
-    )
+    assert.strictEqual(message?.subject, `${queueName}.${queueMaxPriority}`)
   })
 
   it('should add job with data', async () => {
