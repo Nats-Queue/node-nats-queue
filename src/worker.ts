@@ -6,14 +6,14 @@ import {
   JetStreamManager,
 } from '@nats-io/jetstream'
 import { KV, Kvm } from '@nats-io/kv'
-import { RateLimit } from './types'
+import { ChildToParentsKVValue, DependenciesKVValue, RateLimit } from './types'
 import { Limiter, FixedWindowLimiter, IntervalLimiter } from './limiter'
 import { sleep } from './utils'
 import { headers, TimeoutError } from '@nats-io/nats-core'
 import { Job } from './job'
-import { ParentJob } from './types'
 import {
   JobChildCompletedEvent,
+  JobChildFailedEvent,
   JobCompletedEvent,
   JobFailedEvent,
 } from './jobEvent'
@@ -57,7 +57,7 @@ export class Worker {
   protected loopPromise: Promise<void> | null = null
   protected jobEventLoopPromise: Promise<void> | null = null
   protected parentChildrenStore: KV | null = null
-    protected childParentsStore: KV | null = null
+  protected childParentsStore: KV | null = null
   protected priorityQuota?: Map<
     number,
     {
@@ -110,7 +110,7 @@ export class Worker {
       const kvm = await new Kvm(this.client)
       // TODO: Rename
       this.parentChildrenStore = await kvm.open(`${this.name}_parent_id`)
-         this.childParentsStore = await kvm.open(`${this.name}_parents`)
+      this.childParentsStore = await kvm.open(`${this.name}_parents`)
       this.consumers = await this.setupConsumers()
 
       await this.setupInternalQueues(this.manager)
@@ -226,19 +226,10 @@ export class Worker {
     console.log(`Job failed event published to subject=${subject}`)
   }
 
-  private async publishChildJobCompletedEvent(job: Job) {
-    if (job.meta.parentId === undefined) return
-
+  private async publishChildJobCompletedEvent(event: JobChildCompletedEvent) {
     const subject = `${this.name}_parent_notification`
     const messageHeaders = headers()
     messageHeaders.set('Nats-Msg-Id', crypto.randomUUID())
-    const event: JobChildCompletedEvent = {
-      event: 'JOB_CHILD_COMPLETED',
-      data: {
-        childId: job.id,
-        parentId: job.meta?.parentId,
-      },
-    }
     await this.client.publish(
       subject,
       this.utf8Encoder.encode(JSON.stringify(event)),
@@ -247,7 +238,23 @@ export class Worker {
       },
     )
     console.log(
-      `Child job completed event published to subject=${subject} for job id=${job.id}`,
+      `Child job completed event published to subject=${subject} for job id=${event.data.childId} and parent id=${event.data.parentId}`,
+    )
+  }
+
+  private async publishChildJobFailedEvent(event: JobChildFailedEvent) {
+    const subject = `${this.name}_parent_notification`
+    const messageHeaders = headers()
+    messageHeaders.set('Nats-Msg-Id', crypto.randomUUID())
+    await this.client.publish(
+      subject,
+      this.utf8Encoder.encode(JSON.stringify(event)),
+      {
+        headers: messageHeaders,
+      },
+    )
+    console.log(
+      `Child job completed event published to subject=${subject} for job id=${event.data.childId} and parent id=${event.data.parentId}`,
     )
   }
 
@@ -307,7 +314,7 @@ export class Worker {
     if (!this.loopPromise) {
       this.running = true
       this.loopPromise = this.loop()
-      // this.jobEventLoopPromise = this.jobEventsLoop()
+      this.jobEventLoopPromise = this.jobEventsLoop()
     }
   }
 
@@ -375,7 +382,7 @@ export class Worker {
 
   protected async jobEventsLoop() {
     while (this.running) {
-      const [jobCompletedEvents, jobFailedEvents, childJobCompletedEvents] =
+      const [jobCompletedEvents, jobFailedEvents, parentNotificationEvents] =
         await Promise.all([
           this.fetch(this.jobCompletedConsumer!, 1),
           this.fetch(this.jobFailedConsumer!, 1),
@@ -384,27 +391,145 @@ export class Worker {
 
       jobCompletedEvents.forEach((j) => this.processJobCompletedEvent(j))
       jobFailedEvents.forEach((j) => this.processJobFailedEvent(j))
-      childJobCompletedEvents.forEach((j) =>
-        this.processChildJobCompletedEvent(j),
+      parentNotificationEvents.forEach((j) =>
+        this.processParentNotificationEvent(j),
       )
-      await sleep(100)
+      await sleep(1000)
     }
   }
 
-  // TODO: Implement these methods to handle job events
   protected async processJobCompletedEvent(j: JsMsg) {
-    const job: Job = JSON.parse(this.utf8Decoder.decode(j.data))
-    if (job.meta.parentId) {
-      const parentJob = await this.parentChildrenStore!.get(job.meta.parentId)
-      if(!parentJob)
+    const jobCompletedEvent: JobCompletedEvent = j.json()
+    console.log('Processing job completed event:', jobCompletedEvent)
+    const childParentsValue = await this.childParentsStore!.get(
+      jobCompletedEvent.data.jobId,
+    )
+    if (!childParentsValue) return
+
+    const childParents: ChildToParentsKVValue = childParentsValue.json()
+    const parentIds = childParents.parentIds
+
+    for (const parentId of parentIds) {
+      const childCompletedEvent: JobChildCompletedEvent = {
+        event: 'JOB_CHILD_COMPLETED',
+        data: {
+          childId: jobCompletedEvent.data.jobId,
+          parentId: parentId,
+        },
+      }
+
+      await this.publishChildJobCompletedEvent(childCompletedEvent)
+    }
+
+    await this.childParentsStore!.delete(jobCompletedEvent.data.jobId)
+
+    await j.ackAck()
+  }
+
+  protected async processJobFailedEvent(j: JsMsg) {
+    const jobCompletedEvent: JobCompletedEvent = j.json()
+    const childParentsValue = await this.childParentsStore!.get(
+      jobCompletedEvent.data.jobId,
+    )
+    if (!childParentsValue) return
+
+    const childParents: ChildToParentsKVValue = childParentsValue.json()
+    const parentIds = childParents.parentIds
+
+    for (const parentId of parentIds) {
+      const childCompletedEvent: JobChildFailedEvent = {
+        event: 'JOB_CHILD_FAILED',
+        data: {
+          childId: jobCompletedEvent.data.jobId,
+          parentId: parentId,
+        },
+      }
+
+      await this.publishChildJobFailedEvent(childCompletedEvent)
+    }
+
+    await this.childParentsStore!.delete(jobCompletedEvent.data.jobId)
+
+    await j.ackAck()
+  }
+
+  protected async processParentNotificationEvent(j: JsMsg) {
+    const event: JobChildCompletedEvent | JobChildFailedEvent = j.json()
+
+    if (event.event === 'JOB_CHILD_COMPLETED')
+      await this.processChildJobCompletedEvent(event)
+
+    if (event.event === 'JOB_CHILD_FAILED')
+      await this.processChildJobFailedEvent(event)
+
+    await j.ackAck()
+  }
+
+  protected async processChildJobCompletedEvent(
+    childJobCompletedEvent: JobChildCompletedEvent,
+  ) {
+    try {
+      console.log(
+        'Processing child job completed event:',
+        childJobCompletedEvent,
+      )
+      const parentId = childJobCompletedEvent.data.parentId
+      const parentChildrenDependenciesEntry =
+        await this.parentChildrenStore!.get(parentId)
+
+      if (!parentChildrenDependenciesEntry) {
+        throw new Error('Parent job not found in KV store.')
+      }
+
+      console.log('Get parent data: ', parentChildrenDependenciesEntry.value)
+      const parentChildrenDependencies: DependenciesKVValue =
+        parentChildrenDependenciesEntry.json()
+
+      console.log('Parent data: ', parentChildrenDependencies)
+      parentChildrenDependencies.childrenCount -= 1
+
+      if (parentChildrenDependencies.childrenCount === 0) {
+        await this.parentChildrenStore!.delete(parentId)
+        await this.publishParentJob(parentChildrenDependencies)
+      } else {
+        await this.parentChildrenStore!.put(
+          parentChildrenDependencies.id,
+          JSON.stringify(parentChildrenDependencies),
+        )
+      }
+    } catch (e) {
+      console.error(
+        'Failed to process child job completed event:',
+        childJobCompletedEvent,
+        'Error:',
+        e,
+      )
+      throw e
     }
   }
 
-  // TODO: Implement these methods to handle job events
-  protected async processJobFailedEvent(j: JsMsg) {}
+  protected async processChildJobFailedEvent(
+    childJobCompletedEvent: JobChildFailedEvent,
+  ) {
+    console.log('Processing child job failed event:', childJobCompletedEvent)
+    const parentId = childJobCompletedEvent.data.parentId
+    const parentChildrenDependenciesEntry = await this.parentChildrenStore!.get(
+      parentId,
+    )
 
-  // TODO: Implement these methods to handle job events
-  protected async processChildJobCompletedEvent(j: JsMsg) {}
+    if (!parentChildrenDependenciesEntry) {
+      throw new Error('Parent job not found in KV store.')
+    }
+
+    const parentChildrenDependencies: DependenciesKVValue =
+      parentChildrenDependenciesEntry.json()
+
+    parentChildrenDependencies.meta.failed = true
+
+    // TODO: What if child fails publishes parent, then another child completes and cannot access parent?
+    await this.parentChildrenStore!.delete(parentId)
+    await this.publishParentJob(parentChildrenDependencies)
+  }
 
   protected async processTask(j: JsMsg) {
     this.processingNow += 1
@@ -432,7 +557,6 @@ export class Worker {
         )
 
         await this.publishJobFailedEvent(data)
-        await this.markParentsFailed(data)
         return
       }
 
@@ -447,29 +571,6 @@ export class Worker {
       console.log(`Job: name=${data.name} id=${data.id} is completed`)
 
       await this.publishJobCompletedEvent(data)
-
-      const parentId = data.meta?.parentId
-      if (parentId) {
-        const parentJob = await this.parentChildrenStore!.get(parentId)
-        await this.publishChildJobCompletedEvent(data)
-        if (parentJob) {
-          const parentJobData: ParentJob = JSON.parse(
-            this.utf8Decoder.decode(parentJob.value),
-          )
-          parentJobData.childrenCount -= 1
-
-          // TODO: Race condition?
-          await this.parentChildrenStore!.put(
-            parentId,
-            this.utf8Encoder.encode(JSON.stringify(parentJobData)),
-          )
-
-          if (parentJobData.childrenCount === 0) {
-            await this.parentChildrenStore!.delete(parentId)
-            await this.publishParentJob(parentJobData)
-          }
-        }
-      }
     } catch (e) {
       if (e instanceof TimeoutError) {
         console.error(
@@ -497,24 +598,24 @@ export class Worker {
     }
   }
 
-  protected async markParentsFailed(jobData: Job): Promise<void> {
-    const parentId = jobData.meta?.parentId
-    if (!parentId) {
-      return
-    }
+  // protected async markParentsFailed(jobData: Job): Promise<void> {
+  //   const parentId = jobData.meta?.parentId
+  //   if (!parentId) {
+  //     return
+  //   }
 
-    const parentJob = await this.parentChildrenStore!.get(parentId)
-    if (!parentJob) {
-      console.log(`ParentJob with id=${parentId} not found in KV store.`)
-      return
-    }
+  //   const parentJob = await this.parentChildrenStore!.get(parentId)
+  //   if (!parentJob) {
+  //     console.log(`ParentJob with id=${parentId} not found in KV store.`)
+  //     return
+  //   }
 
-    const parentJobData = JSON.parse(this.utf8Decoder.decode(parentJob.value))
-    parentJobData.meta.failed = true
+  //   const parentJobData = JSON.parse(this.utf8Decoder.decode(parentJob.value))
+  //   parentJobData.meta.failed = true
 
-    await this.publishParentJob(parentJobData)
-    await this.markParentsFailed(parentJobData)
-  }
+  //   await this.publishParentJob(parentJobData)
+  //   await this.markParentsFailed(parentJobData)
+  // }
 
   protected async publishParentJob(parentJobData: Job): Promise<void> {
     const subject = `${parentJobData.queueName}.1`
