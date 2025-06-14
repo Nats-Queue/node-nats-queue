@@ -67,6 +67,8 @@ export class Worker {
   protected jobCompletedConsumer: Consumer | null = null
   protected jobFailedConsumer: Consumer | null = null
   protected parentNotificationConsumer: Consumer | null = null
+  protected utf8Encoder = new TextEncoder()
+  protected utf8Decoder = new TextDecoder()
 
   constructor(opts: WorkerOpts) {
     this.client = opts.client
@@ -146,21 +148,21 @@ export class Worker {
     // TODO: What about deduplication
     // Create streams for completed jobs and failed jobs
 
-    await this.manager!.consumers.add(`${this.name}_completed`, {
+    await manager.consumers.add(`${this.name}_completed`, {
       filter_subject: `${this.name}_completed`,
       name: `job_completed_consumer`,
       durable_name: `job_completed_consumer`,
       ack_policy: AckPolicy.All,
     })
 
-    await this.manager!.consumers.add(`${this.name}_failed`, {
+    await manager.consumers.add(`${this.name}_failed`, {
       filter_subject: `${this.name}_failed`,
       name: `job_failed_consumer`,
       durable_name: `job_failed_consumer`,
       ack_policy: AckPolicy.All,
     })
 
-    await this.manager!.consumers.add(`${this.name}_parent_notification`, {
+    await manager.consumers.add(`${this.name}_parent_notification`, {
       filter_subject: `${this.name}_parent_notification`,
       name: `parent_notification_consumer`,
       durable_name: `parent_notification_consumer`,
@@ -193,7 +195,7 @@ export class Worker {
     }
     await this.client.publish(
       subject,
-      new TextEncoder().encode(JSON.stringify(event)),
+      this.utf8Encoder.encode(JSON.stringify(event)),
       {
         headers: messageHeaders,
       },
@@ -213,7 +215,7 @@ export class Worker {
     }
     await this.client.publish(
       subject,
-      new TextEncoder().encode(JSON.stringify(event)),
+      this.utf8Encoder.encode(JSON.stringify(event)),
       {
         headers: messageHeaders,
       },
@@ -236,7 +238,7 @@ export class Worker {
     }
     await this.client.publish(
       subject,
-      new TextEncoder().encode(JSON.stringify(event)),
+      this.utf8Encoder.encode(JSON.stringify(event)),
       {
         headers: messageHeaders,
       },
@@ -397,7 +399,7 @@ export class Worker {
 
   protected async processTask(j: JsMsg) {
     this.processingNow += 1
-    const data: Job = JSON.parse(new TextDecoder().decode(j.data))
+    const data: Job = JSON.parse(this.utf8Decoder.decode(j.data))
     try {
       if (data.meta.failed) {
         await j.term()
@@ -443,14 +445,14 @@ export class Worker {
         await this.publishChildJobCompletedEvent(data)
         if (parentJob) {
           const parentJobData: ParentJob = JSON.parse(
-            new TextDecoder().decode(parentJob.value),
+            this.utf8Decoder.decode(parentJob.value),
           )
           parentJobData.childrenCount -= 1
 
           // TODO: Race condition?
           await this.kv!.put(
             parentId,
-            new TextEncoder().encode(JSON.stringify(parentJobData)),
+            this.utf8Encoder.encode(JSON.stringify(parentJobData)),
           )
 
           if (parentJobData.childrenCount === 0) {
@@ -474,7 +476,7 @@ export class Worker {
       data.meta.retryCount += 1
       data.id = newId
 
-      const jobBytes = new TextEncoder().encode(JSON.stringify(data))
+      const jobBytes = this.utf8Encoder.encode(JSON.stringify(data))
       await j.term()
       const messageHeaders = headers()
       messageHeaders.set('Nats-Msg-Id', newId)
@@ -498,7 +500,7 @@ export class Worker {
       return
     }
 
-    const parentJobData = JSON.parse(new TextDecoder().decode(parentJob.value))
+    const parentJobData = JSON.parse(this.utf8Decoder.decode(parentJob.value))
     parentJobData.meta.failed = true
 
     await this.publishParentJob(parentJobData)
@@ -506,11 +508,11 @@ export class Worker {
   }
 
   protected async publishParentJob(parentJobData: Job): Promise<void> {
-    const subject = `${parentJobData.queueName}.${parentJobData.name}.1`
-    const jobBytes = new TextEncoder().encode(JSON.stringify(parentJobData))
+    const subject = `${parentJobData.queueName}.1`
+    const jobBytes = this.utf8Encoder.encode(JSON.stringify(parentJobData))
     const msgHeaders = headers()
     msgHeaders.set('Nats-Msg-Id', parentJobData.id)
-    await this.client!.publish(subject, jobBytes, {
+    await this.client.publish(subject, jobBytes, {
       headers: msgHeaders,
     })
     console.log(

@@ -7,7 +7,6 @@ import {
   it,
   mock,
 } from 'node:test'
-import { Queue } from '../../../../src/queue'
 import { Worker } from '../../../../src/worker'
 import { connect, NatsConnection } from '@nats-io/transport-node'
 import {
@@ -45,7 +44,7 @@ describe('Worker.process(): flowJob', () => {
   beforeEach(async () => {
     // Create a mock function for the processor
     processorMock = mock.fn<(job: JsMsg, timeout: number) => Promise<void>>(
-      async (job, timeout) => {},
+      async () => {},
     )
 
     queue = new FlowQueue({
@@ -64,7 +63,7 @@ describe('Worker.process(): flowJob', () => {
       maxRetries,
     })
 
-    await worker.setup()
+    // await worker.setup()
   })
 
   afterEach(async () => {
@@ -77,7 +76,7 @@ describe('Worker.process(): flowJob', () => {
   })
 
   it('should notify process parent after all children were processed', async () => {
-    await worker!.start()
+    // await worker!.start()
     const child1 = new Job({
       id: 'child1',
       name: 'child1',
@@ -117,6 +116,9 @@ describe('Worker.process(): flowJob', () => {
     })
 
     await queue!.addFlowJob(flowJobParent)
+
+    await worker?.setup()
+    await worker?.start()
 
     await sleep(2000) // Wait for job to be processed
 
