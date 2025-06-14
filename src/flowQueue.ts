@@ -2,15 +2,18 @@ import { KV, Kvm } from '@nats-io/kv'
 import { FlowJob } from './flowJob'
 import { Job } from './job'
 import { Queue } from './queue'
+import { ChildToParentsKVValue } from './types'
 
 export class FlowQueue extends Queue {
-  private kv: KV | null = null
+  private parentChildrenStore: KV | null = null
+  private childParentsStore: KV | null = null
 
   public override async setup(): Promise<void> {
     try {
       await super.setup()
       const kvm = await new Kvm(this.connection)
-      this.kv = await kvm.create(`${this.name}_parent_id`)
+      this.parentChildrenStore = await kvm.create(`${this.name}_parent_id`)
+      this.childParentsStore = await kvm.create(`${this.name}_parents`)
     } catch (e) {
       console.error(`Error connecting to JetStream: ${e}`)
       throw e
@@ -36,7 +39,7 @@ export class FlowQueue extends Queue {
       return [currentJob]
     }
 
-    await this.kv!.put(
+    await this.parentChildrenStore!.put(
       currentJob.id,
       new TextEncoder().encode(
         JSON.stringify({
@@ -45,6 +48,32 @@ export class FlowQueue extends Queue {
         }),
       ),
     )
+
+    // TODO: Race condition handling
+    for (const child of children) {
+      const parentIds = await this.childParentsStore!.get(child.job.id)
+      if (!parentIds) {
+        await this.childParentsStore!.put(
+          child.job.id,
+          new TextEncoder().encode(
+            JSON.stringify({
+              parentIds: [currentJob.id],
+            }),
+          ),
+        )
+        continue
+      }
+
+      const existingParentIds: ChildToParentsKVValue = JSON.parse(
+        new TextDecoder().decode(parentIds.value),
+      )
+
+      existingParentIds.parentIds.push(currentJob.id)
+      await this.childParentsStore!.put(
+        child.job.id,
+        new TextEncoder().encode(JSON.stringify(existingParentIds)),
+      )
+    }
 
     const deepestJobs: Job[] = []
     for (const child of children) {

@@ -18,7 +18,8 @@ import assert from 'node:assert'
 import { FlowQueue } from '../../src/flowQueue'
 import { FlowJob } from '../../src/flowJob'
 import { Job } from '../../src/job'
-import { Kvm } from '@nats-io/kv'
+import { KV, Kvm } from '@nats-io/kv'
+import { ChildToParentsKVValue, DependenciesKVValue } from '../../src/types'
 
 describe('FlowQueue.addFlowJob()', () => {
   let nc: NatsConnection
@@ -27,6 +28,8 @@ describe('FlowQueue.addFlowJob()', () => {
   const queueName = 'queue'
   const queueMaxPriority = 3
   let queue: FlowQueue | undefined = undefined
+  let parentToChildrenKV: KV
+  let childToParentsKV: KV
 
   before(async () => {
     nc = await connect({ servers: '127.0.0.1:4222' })
@@ -48,6 +51,11 @@ describe('FlowQueue.addFlowJob()', () => {
 
   afterEach(async () => {
     await jsm.streams.delete(queueName).catch(() => {})
+    const kvm = new Kvm(js)
+    parentToChildrenKV = await kvm.open(`${queueName}_parent_id`)
+    if (parentToChildrenKV) await parentToChildrenKV.destroy()
+    childToParentsKV = await kvm.open(`${queueName}_parents`)
+    if (childToParentsKV) await childToParentsKV.destroy()
   })
 
   after(async () => {
@@ -92,12 +100,10 @@ describe('FlowQueue.addFlowJob()', () => {
     })
     await queue!.addFlowJob(job)
 
-    const kv = new Kvm(js)
+    const keyValue = await parentToChildrenKV.get('id-test')
+    if (!keyValue) throw new Error('Parent not found')
 
-    const bucketName = `${queueName}_parent_id`
-    const bucket = await kv.open(bucketName)
-    const keyValue = await bucket.get('id-test')
-    const data = keyValue?.json()
+    const data: DependenciesKVValue = keyValue.json()
     assert.deepStrictEqual(data, {
       id: 'id-test',
       name: 'test',
@@ -141,5 +147,87 @@ describe('FlowQueue.addFlowJob()', () => {
     const parsedData: Job = JSON.parse(new TextDecoder().decode(message?.data))
     assert.strictEqual(parsedData.id, 'id-child1')
     assert.strictEqual(parsedData.meta.parentId, 'id-test')
+  })
+
+  it('should set parents for child in KV', async () => {
+    mock.timers.enable({
+      apis: ['Date'],
+      now: new Date('2023-05-14T11:01:58.135Z'),
+    })
+    const childJob1 = new FlowJob({
+      job: new Job({
+        id: 'test-child',
+        name: 'test-child',
+        queueName,
+        data: {},
+      }),
+    })
+    const job = new FlowJob({
+      job: new Job({
+        id: 'id-test',
+        name: 'test',
+        queueName: queueName,
+        data: {},
+      }),
+      children: [childJob1],
+    })
+    await queue!.addFlowJob(job)
+
+    const childParentsValue = await childToParentsKV.get('test-child')
+    if (!childParentsValue?.value)
+      throw new Error('Child parents value not found')
+
+    const childParentsData: ChildToParentsKVValue = childParentsValue.json()
+    assert.deepStrictEqual(childParentsData, {
+      parentIds: ['id-test'],
+    })
+
+    mock.timers.reset()
+  })
+
+  it('should add new to child if child has multiple parents info to KV', async () => {
+    mock.timers.enable({
+      apis: ['Date'],
+      now: new Date('2023-05-14T11:01:58.135Z'),
+    })
+    const childJob1 = new FlowJob({
+      job: new Job({
+        id: 'child1',
+        name: 'child1',
+        queueName,
+        data: {},
+      }),
+    })
+    const parent1 = new FlowJob({
+      job: new Job({
+        id: 'parent1',
+        name: 'parent1',
+        queueName: queueName,
+        data: {},
+      }),
+      children: [childJob1],
+    })
+    const parent2 = new FlowJob({
+      job: new Job({
+        id: 'parent2',
+        name: 'parent2',
+        queueName: queueName,
+        data: {},
+      }),
+      children: [childJob1],
+    })
+    await queue!.addFlowJob(parent1)
+    await queue!.addFlowJob(parent2)
+
+    const childParentsValue = await childToParentsKV.get('child1')
+    if (!childParentsValue?.value)
+      throw new Error('Child parents value not found')
+
+    const childParentsData: ChildToParentsKVValue = childParentsValue.json()
+    assert.deepStrictEqual(childParentsData, {
+      parentIds: ['parent1', 'parent2'],
+    })
+
+    mock.timers.reset()
   })
 })

@@ -22,3 +22,9 @@ export type RateLimit = {
   duration: number
   max: number
 }
+
+export type DependenciesKVValue = ParentJob
+
+export type ChildToParentsKVValue = {
+  parentIds: string[]
+}

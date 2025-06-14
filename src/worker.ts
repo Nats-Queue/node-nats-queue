@@ -56,7 +56,8 @@ export class Worker {
   protected processingNow = 0
   protected loopPromise: Promise<void> | null = null
   protected jobEventLoopPromise: Promise<void> | null = null
-  protected kv: KV | null = null
+  protected parentChildrenStore: KV | null = null
+    protected childParentsStore: KV | null = null
   protected priorityQuota?: Map<
     number,
     {
@@ -107,7 +108,9 @@ export class Worker {
     try {
       this.manager = await this.client.jetstreamManager()
       const kvm = await new Kvm(this.client)
-      this.kv = await kvm.open(`${this.name}_parent_id`)
+      // TODO: Rename
+      this.parentChildrenStore = await kvm.open(`${this.name}_parent_id`)
+         this.childParentsStore = await kvm.open(`${this.name}_parents`)
       this.consumers = await this.setupConsumers()
 
       await this.setupInternalQueues(this.manager)
@@ -389,7 +392,13 @@ export class Worker {
   }
 
   // TODO: Implement these methods to handle job events
-  protected async processJobCompletedEvent(j: JsMsg) {}
+  protected async processJobCompletedEvent(j: JsMsg) {
+    const job: Job = JSON.parse(this.utf8Decoder.decode(j.data))
+    if (job.meta.parentId) {
+      const parentJob = await this.parentChildrenStore!.get(job.meta.parentId)
+      if(!parentJob)
+    }
+  }
 
   // TODO: Implement these methods to handle job events
   protected async processJobFailedEvent(j: JsMsg) {}
@@ -441,7 +450,7 @@ export class Worker {
 
       const parentId = data.meta?.parentId
       if (parentId) {
-        const parentJob = await this.kv!.get(parentId)
+        const parentJob = await this.parentChildrenStore!.get(parentId)
         await this.publishChildJobCompletedEvent(data)
         if (parentJob) {
           const parentJobData: ParentJob = JSON.parse(
@@ -450,13 +459,13 @@ export class Worker {
           parentJobData.childrenCount -= 1
 
           // TODO: Race condition?
-          await this.kv!.put(
+          await this.parentChildrenStore!.put(
             parentId,
             this.utf8Encoder.encode(JSON.stringify(parentJobData)),
           )
 
           if (parentJobData.childrenCount === 0) {
-            await this.kv!.delete(parentId)
+            await this.parentChildrenStore!.delete(parentId)
             await this.publishParentJob(parentJobData)
           }
         }
@@ -494,7 +503,7 @@ export class Worker {
       return
     }
 
-    const parentJob = await this.kv!.get(parentId)
+    const parentJob = await this.parentChildrenStore!.get(parentId)
     if (!parentJob) {
       console.log(`ParentJob with id=${parentId} not found in KV store.`)
       return
