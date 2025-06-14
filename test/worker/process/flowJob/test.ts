@@ -20,7 +20,8 @@ import assert from 'assert'
 import { sleep } from '../../../../src/utils'
 import { FlowJob } from '../../../../src/flowJob'
 import { FlowQueue } from '../../../../src/flowQueue'
-import { KV, Kvm } from '@nats-io/kv'
+import { deleteAllKV } from '../../../helpers/deleteAllKV'
+import { deleteAllStreams } from '../../../helpers/deleteAllStreams'
 
 describe('Worker.process(): flowJob', () => {
   let nc: NatsConnection
@@ -34,8 +35,6 @@ describe('Worker.process(): flowJob', () => {
   let processorMock: ReturnType<
     typeof mock.fn<(job: JsMsg, timeout: number) => Promise<void>>
   >
-  let parentToChildrenKV: KV
-  let childToParentsKV: KV
 
   before(async () => {
     nc = await connect({ servers: '127.0.0.1:4222' })
@@ -43,22 +42,14 @@ describe('Worker.process(): flowJob', () => {
     jsm = await js.jetstreamManager()
     await jsm.streams.delete(queueName).catch(() => {})
 
-    try {
-      const kvm = new Kvm(js)
-      parentToChildrenKV = await kvm.open(`${queueName}_parent_id`)
-      if (parentToChildrenKV) await parentToChildrenKV.destroy()
-      childToParentsKV = await kvm.open(`${queueName}_parents`)
-      if (childToParentsKV) await childToParentsKV.destroy().catch(() => {})
-    } catch (e) {}
+    await deleteAllKV(nc)
+    await deleteAllStreams(jsm)
   })
 
   beforeEach(async () => {
     // Create a mock function for the processor
     processorMock = mock.fn<(job: JsMsg, timeout: number) => Promise<void>>(
-      async (j, timeout) => {
-        // @ts-expect-error sddfdsf
-        console.log('processing job', j.json().id)
-      },
+      async () => {},
     )
 
     queue = new FlowQueue({
@@ -82,14 +73,8 @@ describe('Worker.process(): flowJob', () => {
 
   afterEach(async () => {
     await worker!.stop()
-    await jsm.streams.delete(queueName).catch(() => {})
-    try {
-      const kvm = new Kvm(js)
-      parentToChildrenKV = await kvm.open(`${queueName}_parent_id`)
-      if (parentToChildrenKV) await parentToChildrenKV.destroy()
-      childToParentsKV = await kvm.open(`${queueName}_parents`)
-      if (childToParentsKV) await childToParentsKV.destroy()
-    } catch (e) {}
+    await deleteAllKV(nc)
+    await deleteAllStreams(jsm)
   })
 
   after(async () => {
@@ -137,11 +122,12 @@ describe('Worker.process(): flowJob', () => {
     })
 
     await queue!.addFlowJob(flowJobParent)
+    // await queue?.addJob(child1)
 
     await worker?.setup()
     await worker?.start()
 
-    await sleep(20000) // Wait for job to be processed
+    await sleep(10000) // Wait for job to be processed
 
     assert.strictEqual(processorMock.mock.calls.length, 3)
 

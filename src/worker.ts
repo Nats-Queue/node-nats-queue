@@ -15,6 +15,7 @@ import {
   JobChildCompletedEvent,
   JobChildFailedEvent,
   JobCompletedEvent,
+  JobEvent,
   JobFailedEvent,
 } from './jobEvent'
 
@@ -203,7 +204,7 @@ export class Worker {
         headers: messageHeaders,
       },
     )
-    console.log(`Job completed event published to subject=${subject}`)
+    console.log(`Event published: ${JSON.stringify(event)}`)
   }
 
   private async publishJobFailedEvent(job: Job) {
@@ -223,7 +224,7 @@ export class Worker {
         headers: messageHeaders,
       },
     )
-    console.log(`Job failed event published to subject=${subject}`)
+    console.log(`Event published: ${JSON.stringify(event)}`)
   }
 
   private async publishChildJobCompletedEvent(event: JobChildCompletedEvent) {
@@ -237,9 +238,7 @@ export class Worker {
         headers: messageHeaders,
       },
     )
-    console.log(
-      `Child job completed event published to subject=${subject} for job id=${event.data.childId} and parent id=${event.data.parentId}`,
-    )
+    console.log(`Event published: ${JSON.stringify(event)}`)
   }
 
   private async publishChildJobFailedEvent(event: JobChildFailedEvent) {
@@ -389,18 +388,36 @@ export class Worker {
           this.fetch(this.parentNotificationConsumer!, 1),
         ])
 
-      jobCompletedEvents.forEach((j) => this.processJobCompletedEvent(j))
-      jobFailedEvents.forEach((j) => this.processJobFailedEvent(j))
-      parentNotificationEvents.forEach((j) =>
-        this.processParentNotificationEvent(j),
-      )
-      await sleep(1000)
+      jobCompletedEvents.forEach((j) => this.processEventMessage(j))
+      jobFailedEvents.forEach((j) => this.processEventMessage(j))
+      parentNotificationEvents.forEach((j) => this.processEventMessage(j))
+      await sleep(100)
     }
   }
 
-  protected async processJobCompletedEvent(j: JsMsg) {
-    const jobCompletedEvent: JobCompletedEvent = j.json()
-    console.log('Processing job completed event:', jobCompletedEvent)
+  protected async processEventMessage(j: JsMsg) {
+    const event: JobEvent = j.json()
+    console.log('Processing event:', event)
+
+    if (event.event === 'JOB_COMPLETED') {
+      await this.processJobCompletedEvent(event)
+    } else if (event.event === 'JOB_FAILED') {
+      await this.processJobFailedEvent(event)
+    } else if (event.event === 'JOB_CHILD_COMPLETED') {
+      await this.processChildJobCompletedEvent(event)
+    } else if (event.event === 'JOB_CHILD_FAILED') {
+      await this.processChildJobFailedEvent(event)
+    } else {
+      console.error('Unknown event:', event)
+    }
+
+    await j.ackAck()
+    console.log('Processing event finished:', event)
+  }
+
+  protected async processJobCompletedEvent(
+    jobCompletedEvent: JobCompletedEvent,
+  ) {
     const childParentsValue = await this.childParentsStore!.get(
       jobCompletedEvent.data.jobId,
     )
@@ -422,16 +439,15 @@ export class Worker {
     }
 
     await this.childParentsStore!.delete(jobCompletedEvent.data.jobId)
-
-    await j.ackAck()
   }
 
-  protected async processJobFailedEvent(j: JsMsg) {
-    const jobCompletedEvent: JobCompletedEvent = j.json()
+  protected async processJobFailedEvent(event: JobFailedEvent) {
     const childParentsValue = await this.childParentsStore!.get(
-      jobCompletedEvent.data.jobId,
+      event.data.jobId,
     )
-    if (!childParentsValue) return
+    if (!childParentsValue) {
+      return
+    }
 
     const childParents: ChildToParentsKVValue = childParentsValue.json()
     const parentIds = childParents.parentIds
@@ -440,7 +456,7 @@ export class Worker {
       const childCompletedEvent: JobChildFailedEvent = {
         event: 'JOB_CHILD_FAILED',
         data: {
-          childId: jobCompletedEvent.data.jobId,
+          childId: event.data.jobId,
           parentId: parentId,
         },
       }
@@ -448,31 +464,13 @@ export class Worker {
       await this.publishChildJobFailedEvent(childCompletedEvent)
     }
 
-    await this.childParentsStore!.delete(jobCompletedEvent.data.jobId)
-
-    await j.ackAck()
-  }
-
-  protected async processParentNotificationEvent(j: JsMsg) {
-    const event: JobChildCompletedEvent | JobChildFailedEvent = j.json()
-
-    if (event.event === 'JOB_CHILD_COMPLETED')
-      await this.processChildJobCompletedEvent(event)
-
-    if (event.event === 'JOB_CHILD_FAILED')
-      await this.processChildJobFailedEvent(event)
-
-    await j.ackAck()
+    await this.childParentsStore!.delete(event.data.jobId)
   }
 
   protected async processChildJobCompletedEvent(
     childJobCompletedEvent: JobChildCompletedEvent,
   ) {
     try {
-      console.log(
-        'Processing child job completed event:',
-        childJobCompletedEvent,
-      )
       const parentId = childJobCompletedEvent.data.parentId
       const parentChildrenDependenciesEntry =
         await this.parentChildrenStore!.get(parentId)
@@ -481,11 +479,9 @@ export class Worker {
         throw new Error('Parent job not found in KV store.')
       }
 
-      console.log('Get parent data: ', parentChildrenDependenciesEntry.value)
       const parentChildrenDependencies: DependenciesKVValue =
         parentChildrenDependenciesEntry.json()
 
-      console.log('Parent data: ', parentChildrenDependencies)
       parentChildrenDependencies.childrenCount -= 1
 
       if (parentChildrenDependencies.childrenCount === 0) {
@@ -511,7 +507,7 @@ export class Worker {
   protected async processChildJobFailedEvent(
     childJobCompletedEvent: JobChildFailedEvent,
   ) {
-    console.log('Processing child job failed event:', childJobCompletedEvent)
+    console.log('Processing event:', childJobCompletedEvent)
     const parentId = childJobCompletedEvent.data.parentId
     const parentChildrenDependenciesEntry = await this.parentChildrenStore!.get(
       parentId,
@@ -597,25 +593,6 @@ export class Worker {
       this.processingNow -= 1
     }
   }
-
-  // protected async markParentsFailed(jobData: Job): Promise<void> {
-  //   const parentId = jobData.meta?.parentId
-  //   if (!parentId) {
-  //     return
-  //   }
-
-  //   const parentJob = await this.parentChildrenStore!.get(parentId)
-  //   if (!parentJob) {
-  //     console.log(`ParentJob with id=${parentId} not found in KV store.`)
-  //     return
-  //   }
-
-  //   const parentJobData = JSON.parse(this.utf8Decoder.decode(parentJob.value))
-  //   parentJobData.meta.failed = true
-
-  //   await this.publishParentJob(parentJobData)
-  //   await this.markParentsFailed(parentJobData)
-  // }
 
   protected async publishParentJob(parentJobData: Job): Promise<void> {
     const subject = `${parentJobData.queueName}.1`
