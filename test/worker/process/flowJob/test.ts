@@ -68,7 +68,7 @@ describe('Worker.process(): flowJob', () => {
       maxRetries,
     })
 
-    // await worker.setup()
+    await worker.setup()
   })
 
   afterEach(async () => {
@@ -82,7 +82,7 @@ describe('Worker.process(): flowJob', () => {
   })
 
   it('should notify process parent after all children were processed', async () => {
-    // await worker!.start()
+    await worker!.start()
     const child1 = new Job({
       id: 'child1',
       name: 'child1',
@@ -122,10 +122,56 @@ describe('Worker.process(): flowJob', () => {
     })
 
     await queue!.addFlowJob(flowJobParent)
-    // await queue?.addJob(child1)
 
-    await worker?.setup()
-    await worker?.start()
+    await sleep(10000) // Wait for job to be processed
+
+    assert.strictEqual(processorMock.mock.calls.length, 3)
+
+    const processedParent: Job = processorMock.mock.calls[2].arguments[0].json()
+    assert(processedParent.id === flowJobParent.job.id)
+  })
+
+  it('should process parent after added child to parent after processing started', async () => {
+    await worker!.start()
+    const child1 = new Job({
+      id: 'child1',
+      name: 'child1',
+      queueName: queueName,
+      data: {
+        message: 42,
+      },
+    })
+    const child2 = new Job({
+      id: 'child2',
+      name: 'child2',
+      queueName: queueName,
+      data: {
+        message: 42,
+      },
+    })
+    const parentJob = new Job({
+      id: 'parentJob',
+      name: 'parentJob',
+      queueName: queueName,
+      data: {
+        message: 42,
+      },
+    })
+
+    const flowJobChild1 = new FlowJob({
+      job: child1,
+      children: [],
+    })
+    const flowJobChild2 = new FlowJob({
+      job: child2,
+      children: [],
+    })
+    const flowJobParent = new FlowJob({
+      job: parentJob,
+      children: [flowJobChild1, flowJobChild2],
+    })
+
+    await queue!.addFlowJob(flowJobParent)
 
     await sleep(10000) // Wait for job to be processed
 

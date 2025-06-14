@@ -2,7 +2,7 @@ import { KV, Kvm } from '@nats-io/kv'
 import { FlowJob } from './flowJob'
 import { Job } from './job'
 import { Queue } from './queue'
-import { ChildToParentsKVValue } from './types'
+import { ChildToParentsKVValue, DependenciesKVValue, ParentJob } from './types'
 
 export class FlowQueue extends Queue {
   private parentChildrenStore: KV | null = null
@@ -82,5 +82,32 @@ export class FlowQueue extends Queue {
     }
 
     return deepestJobs
+  }
+
+  // TODO: How to add parent dependencies correctly?
+  // Child1 hast parent1
+  // Child2 hast parent1
+  // Child2 is added after child1
+  private async addParentDependencies(job: FlowJob) {
+    const existingParentDependencies = await this.parentChildrenStore!.get(
+      job.job.id,
+    )
+    if (!existingParentDependencies) {
+      await this.parentChildrenStore!.put(
+        job.job.id,
+        new TextEncoder().encode(
+          JSON.stringify({
+            ...job,
+            childrenCount: job.children!.length,
+          }),
+        ),
+      )
+      return
+    }
+
+    const parentDependencies: DependenciesKVValue =
+      existingParentDependencies.json()
+
+    parentDependencies.childrenCount += job.children!.length
   }
 }
