@@ -144,6 +144,10 @@ export class Worker {
       name: `${this.name}_parent_notification`,
       subjects: [`${this.name}_parent_notification`],
     })
+
+    const kvm = await new Kvm(this.client)
+    this.parentChildrenStore = await kvm.create(`${this.name}_parent_id`)
+    this.childParentsStore = await kvm.create(`${this.name}_parents`)
   }
 
   private async setupInternalQueuesConsumers(manager: JetStreamManager) {
@@ -400,11 +404,13 @@ export class Worker {
   protected async processJobCompletedEvent(
     jobCompletedEvent: JobCompletedEvent,
   ) {
+    console.log('try get completed KV')
     const childParentsValue = await this.childParentsStore!.get(
       jobCompletedEvent.data.jobId,
     )
     if (!childParentsValue) return
 
+    console.log('try get completed data')
     const childParents: ChildToParentsKVValue = childParentsValue.json()
     const parentIds = childParents.parentIds
 

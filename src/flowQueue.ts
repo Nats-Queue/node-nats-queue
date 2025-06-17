@@ -2,7 +2,7 @@ import { KV, Kvm } from '@nats-io/kv'
 import { FlowJob } from './flowJob'
 import { Job } from './job'
 import { Queue } from './queue'
-import { ChildToParentsKVValue, DependenciesKVValue, ParentJob } from './types'
+import { ChildToParentsKVValue, DependenciesKVValue } from './types'
 
 export class FlowQueue extends Queue {
   private parentChildrenStore: KV | null = null

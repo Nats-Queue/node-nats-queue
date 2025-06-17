@@ -19,6 +19,8 @@ import {
 import { Job } from '../../../../src/job'
 import assert from 'assert'
 import { sleep } from '../../../../src/utils'
+import { deleteAllKV } from '../../../helpers/deleteAllKV'
+import { deleteAllStreams } from '../../../helpers/deleteAllStreams'
 
 describe('Worker.process(): common', () => {
   let nc: NatsConnection
@@ -37,10 +39,12 @@ describe('Worker.process(): common', () => {
     nc = await connect({ servers: '127.0.0.1:4222' })
     js = jetstream(nc)
     jsm = await js.jetstreamManager()
-    await jsm.streams.delete(queueName).catch(() => {})
   })
 
   beforeEach(async () => {
+    await deleteAllKV(nc)
+    await deleteAllStreams(jsm)
+
     // Create a mock function for the processor
     processorMock = mock.fn<(job: JsMsg, timeout: number) => Promise<void>>(
       async (job, timeout) => {},
@@ -67,7 +71,6 @@ describe('Worker.process(): common', () => {
 
   afterEach(async () => {
     await worker!.stop()
-    await jsm.streams.delete(queueName).catch(() => {})
   })
 
   after(async () => {
