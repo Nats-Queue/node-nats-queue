@@ -68,8 +68,8 @@ export class FlowQueue extends Queue {
   }) {
     let newChildrenForCurrentJobCount: number = 0
     for (const childJob of childJobs) {
-      const parentIds = await this.childParentsStore!.get(childJob.id)
-      if (!parentIds) {
+      const childParentsKVEntry = await this.childParentsStore!.get(childJob.id)
+      if (!childParentsKVEntry) {
         await this.childParentsStore!.put(
           childJob.id,
           JSON.stringify({
@@ -80,14 +80,17 @@ export class FlowQueue extends Queue {
         continue
       }
 
-      const existingParentIds: ChildToParentsKVValue = parentIds.json()
+      const parentsInfo: ChildToParentsKVValue = childParentsKVEntry.json()
 
-      if (existingParentIds.parentIds.includes(parentJob.id)) continue
+      if (parentsInfo.parentIds.includes(parentJob.id)) continue
 
-      existingParentIds.parentIds.push(parentJob.id)
+      parentsInfo.parentIds.push(parentJob.id)
       await this.childParentsStore!.put(
         childJob.id,
-        JSON.stringify(existingParentIds),
+        JSON.stringify(parentsInfo),
+        {
+          previousSeq: childParentsKVEntry.revision,
+        },
       )
       newChildrenForCurrentJobCount++
     }
@@ -120,6 +123,9 @@ export class FlowQueue extends Queue {
       await this.parentChildrenStore!.put(
         parentJob.id,
         JSON.stringify(parentDependencies),
+        {
+          previousSeq: existingParentDependencies.revision,
+        },
       )
     }
   }

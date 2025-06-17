@@ -56,7 +56,7 @@ export class Worker {
   protected running = false
   protected processingNow = 0
   protected loopPromise: Promise<void> | null = null
-  protected jobEventLoopPromise: Promise<void> | null = null
+  protected workerEventsLoopPromise: Promise<void> | null = null
   protected parentChildrenStore: KV | null = null
   protected childParentsStore: KV | null = null
   protected priorityQuota?: Map<
@@ -280,7 +280,7 @@ export class Worker {
 
     if (this.loopPromise) {
       await this.loopPromise
-      await this.jobEventLoopPromise
+      await this.workerEventsLoopPromise
     }
     while (this.processingNow > 0) {
       await sleep(this.fetchInterval)
@@ -295,7 +295,7 @@ export class Worker {
     if (!this.loopPromise) {
       this.running = true
       this.loopPromise = this.loop()
-      this.jobEventLoopPromise = this.jobEventsLoop()
+      this.workerEventsLoopPromise = this.workerEventsLoop()
     }
   }
 
@@ -361,7 +361,7 @@ export class Worker {
     }
   }
 
-  protected async jobEventsLoop() {
+  protected async workerEventsLoop() {
     while (this.running) {
       const [jobCompletedEvents, jobFailedEvents, parentNotificationEvents] =
         await Promise.all([
@@ -473,6 +473,9 @@ export class Worker {
         await this.parentChildrenStore!.put(
           parentChildrenDependencies.id,
           JSON.stringify(parentChildrenDependencies),
+          {
+            previousSeq: parentChildrenDependenciesEntry.revision,
+          },
         )
       }
     } catch (e) {
@@ -489,7 +492,6 @@ export class Worker {
   protected async processChildJobFailedEvent(
     childJobCompletedEvent: JobChildFailedEvent,
   ) {
-    console.log('Processing event:', childJobCompletedEvent)
     const parentId = childJobCompletedEvent.data.parentId
     const parentChildrenDependenciesEntry = await this.parentChildrenStore!.get(
       parentId,
