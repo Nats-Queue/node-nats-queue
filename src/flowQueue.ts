@@ -39,41 +39,16 @@ export class FlowQueue extends Queue {
       return [currentJob]
     }
 
-    await this.parentChildrenStore!.put(
-      currentJob.id,
-      new TextEncoder().encode(
-        JSON.stringify({
-          ...currentJob,
-          childrenCount: children.length,
-        }),
-      ),
-    )
+    const newChildrenForCurrentJobCount: number =
+      await this.updateChildDependencies({
+        parentJob: currentJob,
+        childJobs: children.map((child) => child.job),
+      })
 
-    // TODO: Race condition handling
-    for (const child of children) {
-      const parentIds = await this.childParentsStore!.get(child.job.id)
-      if (!parentIds) {
-        await this.childParentsStore!.put(
-          child.job.id,
-          new TextEncoder().encode(
-            JSON.stringify({
-              parentIds: [currentJob.id],
-            }),
-          ),
-        )
-        continue
-      }
-
-      const existingParentIds: ChildToParentsKVValue = JSON.parse(
-        new TextDecoder().decode(parentIds.value),
-      )
-
-      existingParentIds.parentIds.push(currentJob.id)
-      await this.childParentsStore!.put(
-        child.job.id,
-        new TextEncoder().encode(JSON.stringify(existingParentIds)),
-      )
-    }
+    await this.updateParentDependecies({
+      parentJob: currentJob,
+      newChildrentCount: newChildrenForCurrentJobCount,
+    })
 
     const deepestJobs: Job[] = []
     for (const child of children) {
@@ -84,30 +59,68 @@ export class FlowQueue extends Queue {
     return deepestJobs
   }
 
-  // TODO: How to add parent dependencies correctly?
-  // Child1 hast parent1
-  // Child2 hast parent1
-  // Child2 is added after child1
-  private async addParentDependencies(job: FlowJob) {
+  private async updateChildDependencies({
+    parentJob,
+    childJobs,
+  }: {
+    parentJob: Job
+    childJobs: Job[]
+  }) {
+    let newChildrenForCurrentJobCount: number = 0
+    for (const childJob of childJobs) {
+      const parentIds = await this.childParentsStore!.get(childJob.id)
+      if (!parentIds) {
+        await this.childParentsStore!.put(
+          childJob.id,
+          JSON.stringify({
+            parentIds: [parentJob.id],
+          }),
+        )
+        newChildrenForCurrentJobCount++
+        continue
+      }
+
+      const existingParentIds: ChildToParentsKVValue = parentIds.json()
+
+      if (existingParentIds.parentIds.includes(parentJob.id)) continue
+
+      existingParentIds.parentIds.push(parentJob.id)
+      await this.childParentsStore!.put(
+        childJob.id,
+        JSON.stringify(existingParentIds),
+      )
+      newChildrenForCurrentJobCount++
+    }
+
+    return newChildrenForCurrentJobCount
+  }
+
+  private async updateParentDependecies({
+    parentJob,
+    newChildrentCount,
+  }: {
+    parentJob: Job
+    newChildrentCount: number
+  }) {
     const existingParentDependencies = await this.parentChildrenStore!.get(
-      job.job.id,
+      parentJob.id,
     )
     if (!existingParentDependencies) {
       await this.parentChildrenStore!.put(
-        job.job.id,
-        new TextEncoder().encode(
-          JSON.stringify({
-            ...job,
-            childrenCount: job.children!.length,
-          }),
-        ),
+        parentJob.id,
+        JSON.stringify({
+          ...parentJob,
+          childrenCount: newChildrentCount,
+        }),
       )
-      return
+    } else {
+      const parentDependencies: DependenciesKVValue =
+        existingParentDependencies.json()
+      parentDependencies.childrenCount += newChildrentCount
+      await this.parentChildrenStore!.put(
+        parentJob.id,
+        JSON.stringify(parentDependencies),
+      )
     }
-
-    const parentDependencies: DependenciesKVValue =
-      existingParentDependencies.json()
-
-    parentDependencies.childrenCount += job.children!.length
   }
 }

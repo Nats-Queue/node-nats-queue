@@ -47,6 +47,9 @@ describe('FlowQueue.addFlowJob()', () => {
       duplicateWindow: 2000,
     })
     await queue.setup()
+    const kvm = new Kvm(js)
+    parentToChildrenKV = await kvm.open(`${queueName}_parent_id`)
+    childToParentsKV = await kvm.open(`${queueName}_parents`)
   })
 
   afterEach(async () => {
@@ -144,7 +147,9 @@ describe('FlowQueue.addFlowJob()', () => {
     const message = await jsm.streams.getMessage(queueName, {
       seq: 1,
     })
-    const parsedData: Job = JSON.parse(new TextDecoder().decode(message?.data))
+    if (!message) throw new Error('Message not found')
+
+    const parsedData: Job = message.json()
     assert.strictEqual(parsedData.id, 'id-child1')
     assert.strictEqual(parsedData.meta.parentId, 'id-test')
   })
@@ -185,7 +190,7 @@ describe('FlowQueue.addFlowJob()', () => {
     mock.timers.reset()
   })
 
-  it('should add new to child if child has multiple parents info to KV', async () => {
+  it('should add new parent to child if child has multiple parents info to KV', async () => {
     mock.timers.enable({
       apis: ['Date'],
       now: new Date('2023-05-14T11:01:58.135Z'),
@@ -226,6 +231,69 @@ describe('FlowQueue.addFlowJob()', () => {
     const childParentsData: ChildToParentsKVValue = childParentsValue.json()
     assert.deepStrictEqual(childParentsData, {
       parentIds: ['parent1', 'parent2'],
+    })
+
+    mock.timers.reset()
+  })
+
+  it('should add new child to parent', async () => {
+    mock.timers.enable({
+      apis: ['Date'],
+      now: new Date('2023-05-14T11:01:58.135Z'),
+    })
+    const childJob1 = new FlowJob({
+      job: new Job({
+        id: 'child1',
+        name: 'child1',
+        queueName,
+        data: {},
+      }),
+    })
+    const parent1 = new FlowJob({
+      job: new Job({
+        id: 'parent1',
+        name: 'parent1',
+        queueName: queueName,
+        data: {},
+      }),
+      children: [childJob1],
+    })
+    const childJob2 = new FlowJob({
+      job: new Job({
+        id: 'child2',
+        name: 'child2',
+        queueName: queueName,
+        data: {},
+      }),
+      children: [],
+    })
+    const parent2 = new FlowJob({
+      job: new Job({
+        id: 'parent1',
+        name: 'parent1',
+        queueName: queueName,
+        data: {},
+      }),
+      children: [childJob2],
+    })
+    await queue!.addFlowJob(parent1)
+    await queue!.addFlowJob(parent2)
+
+    const parentValue = await parentToChildrenKV.get('parent1')
+    if (!parentValue) throw new Error('Parent not found')
+    const parentData: DependenciesKVValue = parentValue.json()
+    assert.deepStrictEqual(parentData, {
+      id: 'parent1',
+      name: 'parent1',
+      meta: {
+        retryCount: 0,
+        startTime: new Date('2023-05-14T11:01:58.135Z').getTime(),
+        failed: false,
+        timeout: 0,
+      },
+      data: {},
+      queueName: 'queue',
+      childrenCount: 2,
     })
 
     mock.timers.reset()

@@ -69,8 +69,6 @@ export class Worker {
   protected jobCompletedConsumer: Consumer | null = null
   protected jobFailedConsumer: Consumer | null = null
   protected parentNotificationConsumer: Consumer | null = null
-  protected utf8Encoder = new TextEncoder()
-  protected utf8Decoder = new TextDecoder()
 
   constructor(opts: WorkerOpts) {
     this.client = opts.client
@@ -197,13 +195,9 @@ export class Worker {
         jobId: job.id,
       },
     }
-    await this.client.publish(
-      subject,
-      this.utf8Encoder.encode(JSON.stringify(event)),
-      {
-        headers: messageHeaders,
-      },
-    )
+    await this.client.publish(subject, JSON.stringify(event), {
+      headers: messageHeaders,
+    })
     console.log(`Event published: ${JSON.stringify(event)}`)
   }
 
@@ -217,13 +211,9 @@ export class Worker {
         jobId: job.id,
       },
     }
-    await this.client.publish(
-      subject,
-      this.utf8Encoder.encode(JSON.stringify(event)),
-      {
-        headers: messageHeaders,
-      },
-    )
+    await this.client.publish(subject, JSON.stringify(event), {
+      headers: messageHeaders,
+    })
     console.log(`Event published: ${JSON.stringify(event)}`)
   }
 
@@ -231,13 +221,9 @@ export class Worker {
     const subject = `${this.name}_parent_notification`
     const messageHeaders = headers()
     messageHeaders.set('Nats-Msg-Id', crypto.randomUUID())
-    await this.client.publish(
-      subject,
-      this.utf8Encoder.encode(JSON.stringify(event)),
-      {
-        headers: messageHeaders,
-      },
-    )
+    await this.client.publish(subject, JSON.stringify(event), {
+      headers: messageHeaders,
+    })
     console.log(`Event published: ${JSON.stringify(event)}`)
   }
 
@@ -245,13 +231,9 @@ export class Worker {
     const subject = `${this.name}_parent_notification`
     const messageHeaders = headers()
     messageHeaders.set('Nats-Msg-Id', crypto.randomUUID())
-    await this.client.publish(
-      subject,
-      this.utf8Encoder.encode(JSON.stringify(event)),
-      {
-        headers: messageHeaders,
-      },
-    )
+    await this.client.publish(subject, JSON.stringify(event), {
+      headers: messageHeaders,
+    })
     console.log(
       `Child job completed event published to subject=${subject} for job id=${event.data.childId} and parent id=${event.data.parentId}`,
     )
@@ -529,7 +511,7 @@ export class Worker {
 
   protected async processTask(j: JsMsg) {
     this.processingNow += 1
-    const data: Job = JSON.parse(this.utf8Decoder.decode(j.data))
+    const data: Job = j.json()
     try {
       if (data.meta.failed) {
         await j.term()
@@ -582,7 +564,7 @@ export class Worker {
       data.meta.retryCount += 1
       data.id = newId
 
-      const jobBytes = this.utf8Encoder.encode(JSON.stringify(data))
+      const jobBytes = JSON.stringify(data)
       await j.term()
       const messageHeaders = headers()
       messageHeaders.set('Nats-Msg-Id', newId)
@@ -596,7 +578,7 @@ export class Worker {
 
   protected async publishParentJob(parentJobData: Job): Promise<void> {
     const subject = `${parentJobData.queueName}.1`
-    const jobBytes = this.utf8Encoder.encode(JSON.stringify(parentJobData))
+    const jobBytes = JSON.stringify(parentJobData)
     const msgHeaders = headers()
     msgHeaders.set('Nats-Msg-Id', parentJobData.id)
     await this.client.publish(subject, jobBytes, {

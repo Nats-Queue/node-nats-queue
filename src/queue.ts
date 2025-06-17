@@ -5,9 +5,6 @@ import {
   JetStreamManager,
 } from '@nats-io/jetstream'
 import { Job } from './job'
-import { FlowJob } from './flowJob'
-import { TextEncoder } from 'util'
-import { KV, Kvm } from '@nats-io/kv'
 import { headers, nanos, NatsConnection } from '@nats-io/nats-core'
 
 const DEFAULT_DEDUPLICATE_WINDOW = 2000
@@ -127,7 +124,7 @@ export class Queue {
     }
 
     try {
-      const jobData = new TextEncoder().encode(JSON.stringify(job))
+      const jobData = JSON.stringify(job)
       const msgHeaders = headers()
       msgHeaders.set('Nats-Msg-Id', job.id)
 

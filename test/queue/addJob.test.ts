@@ -102,7 +102,8 @@ describe('Queue.addJob()', () => {
     const message = await jsm.streams.getMessage(queueName, {
       seq: 1,
     })
-    const parsedData: Job = JSON.parse(new TextDecoder().decode(message?.data))
+    if (!message) throw new Error('Message not found')
+    const parsedData: Job = message.json()
     assert.deepStrictEqual(parsedData.data, data)
   })
 
@@ -137,7 +138,9 @@ describe('Queue.addJob()', () => {
     const message = await jsm.streams.getMessage(queueName, {
       seq: 1,
     })
-    const parsedData: Job = JSON.parse(new TextDecoder().decode(message?.data))
+    if (!message) throw new Error('Message not found')
+
+    const parsedData: Job = message.json()
     assert.strictEqual(parsedData.meta.retryCount, 0)
     assert.strictEqual(parsedData.meta.failed, false)
     assert.strictEqual(parsedData.meta.timeout, 1000)
