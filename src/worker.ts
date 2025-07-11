@@ -202,7 +202,6 @@ export class Worker {
     await this.client.publish(subject, JSON.stringify(event), {
       headers: messageHeaders,
     })
-    console.log(`Event published: ${JSON.stringify(event)}`)
   }
 
   private async publishJobFailedEvent(job: Job) {
@@ -218,7 +217,6 @@ export class Worker {
     await this.client.publish(subject, JSON.stringify(event), {
       headers: messageHeaders,
     })
-    console.log(`Event published: ${JSON.stringify(event)}`)
   }
 
   private async publishChildJobCompletedEvent(event: JobChildCompletedEvent) {
@@ -228,7 +226,6 @@ export class Worker {
     await this.client.publish(subject, JSON.stringify(event), {
       headers: messageHeaders,
     })
-    console.log(`Event published: ${JSON.stringify(event)}`)
   }
 
   private async publishChildJobFailedEvent(event: JobChildFailedEvent) {
@@ -238,9 +235,6 @@ export class Worker {
     await this.client.publish(subject, JSON.stringify(event), {
       headers: messageHeaders,
     })
-    console.log(
-      `Child job completed event published to subject=${subject} for job id=${event.data.childId} and parent id=${event.data.parentId}`,
-    )
   }
 
   private async setupConsumers(): Promise<Consumer[]> {
@@ -404,13 +398,11 @@ export class Worker {
   protected async processJobCompletedEvent(
     jobCompletedEvent: JobCompletedEvent,
   ) {
-    console.log('try get completed KV')
     const childParentsValue = await this.childParentsStore!.get(
       jobCompletedEvent.data.jobId,
     )
     if (!childParentsValue) return
 
-    console.log('try get completed data')
     const childParents: ChildToParentsKVValue = childParentsValue.json()
     const parentIds = childParents.parentIds
 

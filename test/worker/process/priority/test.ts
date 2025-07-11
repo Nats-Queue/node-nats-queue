@@ -43,9 +43,7 @@ describe('Worker.process(): priority', () => {
   beforeEach(async () => {
     // Create a mock function for the processor
     processorMock = mock.fn<(job: JsMsg, timeout: number) => Promise<void>>(
-      async (job, timeout) => {
-        console.log(`Processing job: ${job.subject} with timeout: ${timeout}`)
-      },
+      async () => {},
     )
 
     queue = new Queue({

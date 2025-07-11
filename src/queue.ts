@@ -10,7 +10,7 @@ import { headers, nanos, NatsConnection } from '@nats-io/nats-core'
 const DEFAULT_DEDUPLICATE_WINDOW = 2000
 const MIN_DUPLICATE_WINDOW = 100
 
-type QueueOpts = {
+export type QueueOpts = {
   connection: NatsConnection
   name: string
   priorities: number

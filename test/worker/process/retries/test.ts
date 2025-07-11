@@ -43,9 +43,7 @@ describe('Worker.process(): retries', () => {
   beforeEach(async () => {
     // Create a mock function for the processor
     processorMock = mock.fn<(job: JsMsg, timeout: number) => Promise<void>>(
-      async (job, timeout) => {
-        console.log('old processor called')
-      },
+      async () => {},
     )
 
     queue = new Queue({
@@ -87,7 +85,7 @@ describe('Worker.process(): retries', () => {
       },
     })
 
-    processorMock.mock.mockImplementationOnce(async (job, timeout) => {
+    processorMock.mock.mockImplementationOnce(async () => {
       throw new Error('Processing failed')
     })
 
@@ -115,7 +113,7 @@ describe('Worker.process(): retries', () => {
       },
     })
 
-    processorMock.mock.mockImplementation(async (job, timeout) => {
+    processorMock.mock.mockImplementation(async () => {
       throw new Error('Processing failed')
     })
 

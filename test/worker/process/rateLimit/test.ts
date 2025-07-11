@@ -43,7 +43,7 @@ describe('Worker.process(): rateLimit', () => {
   beforeEach(async () => {
     // Create a mock function for the processor
     processorMock = mock.fn<(job: JsMsg, timeout: number) => Promise<void>>(
-      async (job, timeout) => {},
+      async () => {},
     )
 
     queue = new Queue({

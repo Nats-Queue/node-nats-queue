@@ -47,7 +47,7 @@ describe('Worker.process(): common', () => {
 
     // Create a mock function for the processor
     processorMock = mock.fn<(job: JsMsg, timeout: number) => Promise<void>>(
-      async (job, timeout) => {},
+      async () => {},
     )
 
     queue = new Queue({

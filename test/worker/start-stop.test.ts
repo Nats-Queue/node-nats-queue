@@ -7,21 +7,18 @@ import {
 import { connect } from '@nats-io/transport-node'
 import { NatsConnection } from '@nats-io/nats-core'
 import { Worker } from '../../src/worker'
-import { Kvm } from '@nats-io/kv'
 import assert from 'node:assert'
 
 describe('Worker.start(), Worker.stop()', () => {
   let nc: NatsConnection
   let js: JetStreamClient
   let jsm: JetStreamManager
-  let kvm: Kvm
   const queueName = 'queue'
 
   before(async () => {
     nc = await connect({ servers: '127.0.0.1:4222' })
     js = jetstream(nc)
     jsm = await js.jetstreamManager()
-    kvm = await new Kvm(nc)
   })
 
   beforeEach(async () => {
