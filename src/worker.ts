@@ -437,18 +437,18 @@ export class Worker {
     }
   }
 
-  protected async publishParentJob(parentJobData: Job): Promise<void> {
-    const subject = `${parentJobData.queueName}.1`
-    const jobBytes = JSON.stringify(parentJobData)
-    const msgHeaders = headers()
-    msgHeaders.set('Nats-Msg-Id', parentJobData.id)
-    await this.client.publish(subject, jobBytes, {
-      headers: msgHeaders,
-    })
-    console.log(
-      `ParentJob: name=${parentJobData.name} id=${parentJobData.id} added to topic=${subject} successfully`,
-    )
-  }
+  // protected async publishParentJob(parentJobData: Job): Promise<void> {
+  //   const subject = `${parentJobData.queueName}.1`
+  //   const jobBytes = JSON.stringify(parentJobData)
+  //   const msgHeaders = headers()
+  //   msgHeaders.set('Nats-Msg-Id', parentJobData.id)
+  //   await this.client.publish(subject, jobBytes, {
+  //     headers: msgHeaders,
+  //   })
+  //   console.log(
+  //     `ParentJob: name=${parentJobData.name} id=${parentJobData.id} added to topic=${subject} successfully`,
+  //   )
+  // }
 
   protected async fetch(consumer: Consumer, count: number): Promise<JsMsg[]> {
     // TODO: Maybe fail to fetch consumer info

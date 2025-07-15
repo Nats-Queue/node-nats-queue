@@ -8,7 +8,7 @@ export class Job {
     startTime: number
     retryCount: number
     timeout: number
-    parentId?: string
+    // parentId?: string
   }
   data: unknown
   queueName: string
