@@ -3,6 +3,7 @@
   "version": "",
   "description": "Queue over Nats",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "repository": "https://github.com/arusakov/node-nats-queue.git",
   "author": "Aleksandr Rusakov <aleksandr.s.rusakov@gmail.com>",
   "license": "MIT",
@@ -13,18 +14,15 @@
     "build": "tsc -p .",
     "compile": "tsc --noEmit -p ./test",
     "lint": "eslint .",
-    "test:all": "TS_NODE_PROJECT=test/tsconfig.json yarn test ./test/*.test.ts",
+    "test:all": "TS_NODE_PROJECT=test/tsconfig.json yarn test ./test/**/*.test.ts",
     "test:coverage:html": "c8 --reporter=html --reporter=text yarn test:all",
     "test:coverage": "c8 --reporter=lcovonly --reporter=text yarn test:all",
     "test": "node --test --test-concurrency=1 --require=ts-node/register"
   },
   "devDependencies": {
     "@eslint/js": "9.11.0",
-    "@nats-io/jetstream": "3.0.0-10",
-    "@nats-io/nats-core": "3.0.0-27",
-    "@nats-io/transport-node": "3.0.0-12",
     "@types/eslint__js": "8.42.3",
-    "@types/node": "^20.0.0",
+    "@types/node": "22.0.0",
     "c8": "10.1.2",
     "eslint": "9.11.0",
     "ts-node": "10.9.2",
@@ -33,5 +31,11 @@
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@nats-io/kv": "3.0.2",
+    "@nats-io/jetstream": "3.0.2",
+    "@nats-io/nats-core": "3.0.2",
+    "@nats-io/transport-node": "3.0.2"
   }
 }
