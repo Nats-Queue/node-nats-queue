@@ -1,8 +1,8 @@
-import { Job } from './job'
+// import { Job } from './job'
 
-export type ParentJob = Job & {
-  childrenCount: number
-}
+// export type ParentJob = Job & {
+//   childrenCount: number
+// }
 
 export type JobCreateData = {
   name: string
@@ -13,18 +13,18 @@ export type JobCreateData = {
   timeout?: number
 }
 
-export type FlowJobCreateData = {
-  job: JobCreateData
-  children?: FlowJobCreateData[]
-}
+// export type FlowJobCreateData = {
+//   job: JobCreateData
+//   children?: FlowJobCreateData[]
+// }
 
 export type RateLimit = {
   duration: number
   max: number
 }
 
-export type DependenciesKVValue = ParentJob
+// export type DependenciesKVValue = ParentJob
 
-export type ChildToParentsKVValue = {
-  parentIds: string[]
-}
+// export type ChildToParentsKVValue = {
+//   parentIds: string[]
+// }
